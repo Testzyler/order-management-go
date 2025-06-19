@@ -1,0 +1,12 @@
+
+HttpServer:
+  Port: 3333
+
+Database:
+  Enable: true
+  Username: dborder
+  Password: SecretP@ssw0rd
+  Host: localhost
+  Port: 5432
+  DatabaseName: store
+  DatabaseSchema: store
