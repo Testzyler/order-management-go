@@ -5,14 +5,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/Testzyler/order-management-go/application/constants"
 	"github.com/Testzyler/order-management-go/infrastructure/http/api"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
 
 var AppServer *fiber.App
-var methodRoutes map[string]map[string]constants.HandlerFunc
 
 func InitHttpServer() {
 
@@ -26,12 +24,17 @@ func InitHttpServer() {
 		IdleTimeout:     60 * time.Second,
 	})
 
-	// Config Default Path
-	AddRoute()
-
-	// Add Api Path
+	// Add Api Path (includes health check now)
 	apiGroup := AppServer.Group("/api")
 	api.AddRoute(&apiGroup)
+
+	// Add health check at root level
+	AppServer.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":  "OK",
+			"message": "Service is healthy",
+		})
+	})
 
 	// Start Server
 	fmt.Printf("serving http at http://127.0.0.1:%s", httpPort)
@@ -48,36 +51,4 @@ func ShutdownHttpServer() {
 		return
 	}
 	fmt.Println("http server shut down completed")
-}
-
-func AddRoute() {
-	for method, routes := range methodRoutes {
-		if method == constants.METHOD_GET {
-			for routeName, routeFunc := range routes {
-				AppServer.Get(routeName, routeFunc)
-			}
-		} else if method == constants.METHOD_POST {
-			for routeName, routeFunc := range routes {
-				AppServer.Post(routeName, routeFunc)
-			}
-		} else if method == constants.METHOD_PUT {
-			for routeName, routeFunc := range routes {
-				AppServer.Put(routeName, routeFunc)
-			}
-		} else if method == constants.METHOD_DELETE {
-			for routeName, routeFunc := range routes {
-				AppServer.Delete(routeName, routeFunc)
-			}
-		} else {
-			log.Printf("unknown method %s", method)
-		}
-	}
-}
-
-func init() {
-	methodRoutes = make(map[string]map[string]constants.HandlerFunc)
-	methodRoutes[constants.METHOD_GET] = make(map[string]constants.HandlerFunc)
-	methodRoutes[constants.METHOD_POST] = make(map[string]constants.HandlerFunc)
-
-	methodRoutes[constants.METHOD_GET]["/healthz"] = Healthz
 }

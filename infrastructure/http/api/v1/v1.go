@@ -2,27 +2,12 @@ package v1
 
 import (
 	"github.com/Testzyler/order-management-go/application/constants"
+	"github.com/Testzyler/order-management-go/infrastructure/http/api/route"
 	"github.com/gofiber/fiber/v2"
 )
 
-type Routes []Route
-
-type Route struct {
-	Name        string
-	Path        string
-	Method      string
-	HandlerFunc constants.HandlerFunc
-}
-
-type RouteDefinition struct {
-	Routes Routes
-	Prefix string
-}
-
-var RouteDefinitions = make([]RouteDefinition, 0)
-
 func AddRoute(router *fiber.Router) {
-	for _, routeDefinition := range RouteDefinitions {
+	for _, routeDefinition := range route.RouteDefinitions {
 		routerWithPrefix := (*router).Group(routeDefinition.Prefix)
 		for _, route := range routeDefinition.Routes {
 			if route.Method == constants.METHOD_GET {

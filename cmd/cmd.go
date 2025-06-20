@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	infrastructure "github.com/Testzyler/order-management-go/infrastructure/database"
 	"github.com/Testzyler/order-management-go/infrastructure/http"
@@ -19,6 +21,31 @@ var rootCmd = &cobra.Command{
 	Short: "Order management CLI app",
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Usage()
+	},
+}
+
+var serveCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "serve http server",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Initialize services
+		initPostgresql()
+		initHttpServer()
+
+		// Wait for interrupt signal to gracefully shut down the server
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+
+		fmt.Println("Shutting down server...")
+
+		// Shutdown services
+		shutdownHttpServer()
+		shutdownPostgresql()
+
+		wg.Wait()
+
+		fmt.Println("Server gracefully stopped")
 	},
 }
 
@@ -58,18 +85,16 @@ func initConfig() {
 func initHttpServer() {
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		http.InitHttpServer()
-		wg.Done()
 	}()
 }
 
 func shutdownHttpServer() {
 	http.ShutdownHttpServer()
-	wg.Done()
 }
 
 func initPostgresql() {
-	wg.Add(1)
 	infrastructure.NewDatabaseConnection()
 }
 
@@ -79,11 +104,11 @@ func shutdownPostgresql() {
 			fmt.Fprintf(os.Stderr, "error closing database connection: %v\n", err)
 		}
 	}
-	wg.Done()
 }
 
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "./config/config.yaml", "config file")
+	rootCmd.AddCommand(serveCmd)
 }

@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	v1 "github.com/Testzyler/order-management-go/infrastructure/http/api/v1"
+	"github.com/Testzyler/order-management-go/infrastructure/http/api/route"
 	"github.com/spf13/cobra"
 )
 
@@ -62,7 +62,7 @@ var ServeCmd = &cobra.Command{
 		initHttpServer()
 
 		// Initialize handlers after database is ready
-		v1.InitializeOrderHandler()
+		route.InitializeAllHandlers()
 
 		// Waiting for Component Shut Down
 		wg.Wait()
