@@ -28,7 +28,7 @@ var (
 	batchSizeFlag   int
 	concurrencyFlag int
 	apiURLFlag      string
-	totalTimeout    = 15 * time.Second
+	totalTimeout    = 30 * time.Second
 )
 
 func init() {
@@ -59,32 +59,33 @@ func RunStressTest(numOrders, batchSize, concurrency int, apiURL string) {
 	log.Printf("Divided orders into %d batches.", len(orderBatches))
 
 	var wg sync.WaitGroup
-	results := make(chan error, len(orderBatches))
+	results := make(chan error, numOrders)
 	sem := make(chan struct{}, concurrency)
 
 	startTime := time.Now()
 
-	for i, batch := range orderBatches {
+	for i, order := range ordersToCreate {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(index int, currentBatch []models.CreateOrderInput) {
+
+		go func(index int, order models.CreateOrderInput) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			log.Printf("Sending batch %d with %d orders...", index+1, len(currentBatch))
+			log.Printf("Sending order %d...", index+1)
 
 			reqCtx, cancel := context.WithTimeout(ctx, totalTimeout)
 			defer cancel()
 
-			err := sendBulkOrderRequest(reqCtx, currentBatch, apiURL)
+			err := sendBulkOrderRequest(reqCtx, order, apiURL)
 			if err != nil {
-				log.Printf("Error sending batch %d: %v", index+1, err)
+				log.Printf("Error sending order %d: %v", index+1, err)
 				results <- err
 			} else {
-				log.Printf("Successfully sent batch %d.", index+1)
+				log.Printf("Successfully sent order %d.", index+1)
 				results <- nil
 			}
-		}(i, batch)
+		}(i, order)
 	}
 
 	go func() {
@@ -104,10 +105,9 @@ func RunStressTest(numOrders, batchSize, concurrency int, apiURL string) {
 	duration := time.Since(startTime)
 
 	log.Printf("\n--- Stress Test Summary ---")
-	log.Printf("Total Orders Attempted: %d", numOrders)
-	log.Printf("Total Batches Sent: %d", len(orderBatches))
-	log.Printf("Successful Batches: %d", successCount)
-	log.Printf("Failed Batches: %d", errorCount)
+	log.Printf("Total Orders Sent: %d", numOrders)
+	log.Printf("Successful Orders: %d", successCount)
+	log.Printf("Failed Orders: %d", errorCount)
 	log.Printf("Total Duration: %s", duration)
 }
 
@@ -134,8 +134,8 @@ func generateDummyOrders(count int) []models.CreateOrderInput {
 	return orders
 }
 
-func sendBulkOrderRequest(ctx context.Context, orders []models.CreateOrderInput, apiURL string) error {
-	payload, err := json.Marshal(orders)
+func sendBulkOrderRequest(ctx context.Context, order models.CreateOrderInput, apiURL string) error {
+	payload, err := json.Marshal(order)
 	if err != nil {
 		return fmt.Errorf("failed to marshal orders: %w", err)
 	}
@@ -156,11 +156,10 @@ func sendBulkOrderRequest(ctx context.Context, orders []models.CreateOrderInput,
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusAccepted {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		var responseBody bytes.Buffer
 		responseBody.ReadFrom(resp.Body)
-		return fmt.Errorf("API returned non-202 status: %d - %s", resp.StatusCode, responseBody.String())
+		return fmt.Errorf("API returned non-2xx status: %d - %s", resp.StatusCode, responseBody.String())
 	}
-
 	return nil
 }

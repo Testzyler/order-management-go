@@ -54,8 +54,8 @@ func InitializeDatabase() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
+	db.SetMaxOpenConns(100)
+	db.SetMaxIdleConns(100)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	db.SetConnMaxIdleTime(time.Duration(180) * time.Second)
 
