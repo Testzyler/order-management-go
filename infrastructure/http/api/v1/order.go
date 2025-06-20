@@ -86,8 +86,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		requestLogger.WithError(err).Error("Failed to parse request body")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    err.Error(),
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": err.Error(),
 		})
 	}
 
@@ -100,29 +99,25 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 		if errors.Is(err, context.Canceled) {
 			requestLogger.Warn("Request cancelled by client", "duration_ms", duration.Milliseconds())
 			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message":    "Request was cancelled by client",
-				"request_id": logger.RequestIDFromContext(ctx),
+				"message": "Request was cancelled by client",
 			})
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			requestLogger.Warn("Request timed out", "duration_ms", duration.Milliseconds())
 			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message":    "Request timed out",
-				"request_id": logger.RequestIDFromContext(ctx),
+				"message": "Request timed out",
 			})
 		}
 
 		requestLogger.WithError(err).Error("Failed to create order", "duration_ms", duration.Milliseconds())
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-			"message":    err.Error(),
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": err.Error(),
 		})
 	}
 
 	requestLogger.Info("Order created successfully", "duration_ms", duration.Milliseconds())
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message":    "Order created successfully",
-		"request_id": logger.RequestIDFromContext(ctx),
+		"message": "Order created successfully",
 	})
 }
 
@@ -136,8 +131,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 	if id == "" {
 		requestLogger.Error("Order ID is required")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Order ID is required",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Order ID is required",
 		})
 	}
 
@@ -145,8 +139,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 	if err != nil {
 		requestLogger.WithError(err).Error("Invalid Order ID format", "id", id)
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Invalid Order ID format",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Invalid Order ID format",
 		})
 	}
 
@@ -159,34 +152,29 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 		if errors.Is(err, context.Canceled) {
 			requestLogger.Warn("Request cancelled by client", "order_id", idInt, "duration_ms", duration.Milliseconds())
 			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message":    "Request was cancelled by client",
-				"request_id": logger.RequestIDFromContext(ctx),
+				"message": "Request was cancelled by client",
 			})
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			requestLogger.Warn("Request timed out", "order_id", idInt, "duration_ms", duration.Milliseconds())
 			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message":    "Request timed out",
-				"request_id": logger.RequestIDFromContext(ctx),
+				"message": "Request timed out",
 			})
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			requestLogger.Warn("Order not found", "order_id", idInt)
 			return c.Status(fiber.ErrNotFound.Code).JSON(fiber.Map{
-				"message":    "Order not found",
-				"request_id": logger.RequestIDFromContext(ctx),
+				"message": "Order not found",
 			})
 		}
 		requestLogger.WithError(err).Error("Failed to get order", "order_id", idInt, "duration_ms", duration.Milliseconds())
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-			"message":    err.Error(),
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": err.Error(),
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"data":       order,
-		"request_id": logger.RequestIDFromContext(ctx),
+		"data": order,
 	})
 }
 
@@ -198,8 +186,7 @@ func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
 	if id == "" {
 		requestLogger.Error("Order ID is required for update")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Order ID is required",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Order ID is required",
 		})
 	}
 
@@ -207,8 +194,7 @@ func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		requestLogger.WithError(err).Error("Failed to parse update request body")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    err.Error(),
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": err.Error(),
 		})
 	}
 
@@ -216,8 +202,7 @@ func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
 	if err != nil {
 		requestLogger.WithError(err).Error("Invalid Order ID format", "id", id)
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Invalid Order ID",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Invalid Order ID",
 		})
 	}
 
@@ -226,15 +211,13 @@ func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
 	if err != nil {
 		requestLogger.WithError(err).Error("Failed to update order", "order_id", idInt)
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-			"message":    err.Error(),
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": err.Error(),
 		})
 	}
 
 	requestLogger.Info("Order updated successfully", "order_id", idInt, "status", input.Status)
 	return c.JSON(fiber.Map{
-		"message":    "Order updated successfully",
-		"request_id": logger.RequestIDFromContext(ctx),
+		"message": "Order updated successfully",
 	})
 }
 
@@ -246,8 +229,7 @@ func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
 	if id == "" {
 		requestLogger.Error("Order ID is required for deletion")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Order ID is required",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Order ID is required",
 		})
 	}
 
@@ -255,8 +237,7 @@ func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
 	if err != nil {
 		requestLogger.WithError(err).Error("Invalid Order ID format", "id", id)
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Invalid Order ID",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Invalid Order ID",
 		})
 	}
 
@@ -264,15 +245,13 @@ func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
 	if err != nil {
 		requestLogger.WithError(err).Error("Failed to delete order", "order_id", idInt)
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-			"message":    err.Error(),
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": err.Error(),
 		})
 	}
 
 	requestLogger.Info("Order deleted successfully", "order_id", idInt)
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
-		"message":    "Order deleted successfully",
-		"request_id": logger.RequestIDFromContext(ctx),
+		"message": "Order deleted successfully",
 	})
 }
 
@@ -286,16 +265,14 @@ func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
 	if err != nil || pageInt < 1 {
 		requestLogger.WithError(err).Error("Invalid page parameter", "page", page)
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Invalid page number",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Invalid page number",
 		})
 	}
 	sizeInt, err := strconv.Atoi(size)
 	if err != nil || sizeInt < 1 {
 		requestLogger.WithError(err).Error("Invalid size parameter", "size", size)
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message":    "Invalid size number",
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": "Invalid size number",
 		})
 	}
 
@@ -307,15 +284,13 @@ func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
 		if errors.Is(err, pgx.ErrNoRows) {
 			requestLogger.Warn("No orders found", "page", pageInt, "size", sizeInt)
 			return c.Status(fiber.ErrNotFound.Code).JSON(fiber.Map{
-				"message":    "Order not found",
-				"request_id": logger.RequestIDFromContext(ctx),
+				"message": "Order not found",
 			})
 		}
 
 		requestLogger.WithError(err).Error("Failed to list orders", "page", pageInt, "size", sizeInt)
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-			"message":    err.Error(),
-			"request_id": logger.RequestIDFromContext(ctx),
+			"message": err.Error(),
 		})
 	}
 
