@@ -2,7 +2,8 @@ package http
 
 import (
 	"fmt"
-	"os"
+	"log"
+	"time"
 
 	"github.com/Testzyler/order-management-go/application/constants"
 	"github.com/Testzyler/order-management-go/infrastructure/http/api"
@@ -20,6 +21,9 @@ func InitHttpServer() {
 	AppServer = fiber.New(fiber.Config{
 		ReadBufferSize:  1024 * 1024, // 1MB
 		WriteBufferSize: 1024 * 1024, // 1MB
+		ReadTimeout:     30 * time.Second,
+		WriteTimeout:    30 * time.Second,
+		IdleTimeout:     60 * time.Second,
 	})
 
 	// Config Default Path
@@ -33,8 +37,7 @@ func InitHttpServer() {
 	fmt.Printf("serving http at http://127.0.0.1:%s", httpPort)
 	err := AppServer.Listen(":" + httpPort)
 	if err != nil {
-		fmt.Println("http server listen and serves failed")
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }
 

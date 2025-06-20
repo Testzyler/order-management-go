@@ -55,7 +55,8 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	db.Config().MaxConns = 200
+	db.Config().MaxConns = 500
+	db.Config().MinIdleConns = 500
 	db.Config().MaxConnLifetime = 5 * time.Minute
 
 	fmt.Println("Database connection established successfully.")

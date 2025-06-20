@@ -138,8 +138,14 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 	defer func() {
 		if err != nil {
 			tx.Rollback(ctx)
+			fmt.Printf("failed to rollback transaction: %v\n", err)
+			return
 		} else {
 			err = tx.Commit(ctx)
+			if err != nil {
+				fmt.Printf("failed to commit transaction: %v\n", err)
+				return
+			}
 		}
 	}()
 
@@ -156,7 +162,7 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 	if len(items) > 0 {
 		itemQuery := "INSERT INTO order_items (order_id, product_name, quantity, price, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)"
 		for _, item := range items {
-			_, err = tx.Query(ctx, itemQuery, insertedOrderID, item.ProductName, item.Quantity, item.Price, timeNow, timeNow)
+			_, err = tx.Exec(ctx, itemQuery, insertedOrderID, item.ProductName, item.Quantity, item.Price, timeNow, timeNow)
 			if err != nil {
 				return err
 			}

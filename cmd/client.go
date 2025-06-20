@@ -146,7 +146,15 @@ func sendBulkOrderRequest(ctx context.Context, order models.CreateOrderInput, ap
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxConnsPerHost:     500,
+			MaxIdleConns:        500,
+			MaxIdleConnsPerHost: 500,
+			IdleConnTimeout:     90 * time.Second,
+		},
+		Timeout: 10 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
