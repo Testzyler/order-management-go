@@ -28,7 +28,7 @@ var (
 	batchSizeFlag   int
 	concurrencyFlag int
 	apiURLFlag      string
-	totalTimeout    = 60 * time.Second
+	totalTimeout    = 5 * time.Minute // Total timeout for the stress test
 )
 
 func init() {

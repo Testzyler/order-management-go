@@ -58,8 +58,8 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	}
 
 	db.Config().MaxConns = 500
-	db.Config().MinIdleConns = 500
-	db.Config().MaxConnLifetime = 5 * time.Minute
+	db.Config().MinIdleConns = 250
+	db.Config().MaxConnLifetime = 180 * time.Second
 
 	fmt.Println("Database connection established successfully.")
 	return db, nil
