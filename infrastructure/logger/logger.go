@@ -3,17 +3,17 @@ package logger
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Logger struct {
-	*slog.Logger
+	zap    *zap.Logger
+	fields map[string]interface{}
 }
 
 type LoggerConfig struct {
@@ -23,7 +23,7 @@ type LoggerConfig struct {
 	TimeFormat  string `yaml:"TimeFormat" mapstructure:"TimeFormat"`
 	Output      string `yaml:"Output" mapstructure:"Output"`           // "stdout", "stderr", or file path (used when EnableFile is false)
 	EnableColor bool   `yaml:"EnableColor" mapstructure:"EnableColor"` // Enable colored output
-	EnableFile  bool   `yaml:"EnableFile" mapstructure:"EnableFile"`   // Enable file logging
+	EnableFile  bool   `yaml:"EnableFile" mapstructure:"EnableFile"`   // Enable file logging (writes to both console and file)
 	FilePath    string `yaml:"FilePath" mapstructure:"FilePath"`       // File path when EnableFile is true
 }
 
@@ -34,47 +34,104 @@ var (
 
 // Initialize sets up the global logger with the provided configuration
 func Initialize(config LoggerConfig) error {
-	level, err := parseLogLevel(config.Level)
+	level, err := parseZapLogLevel(config.Level)
 	if err != nil {
 		return err
 	}
 
-	// Determine output based on EnableFile flag
-	var output io.Writer
+	// Create output writers
+	var writers []zapcore.WriteSyncer
+
+	// Always add console output
+	var consoleOutput zapcore.WriteSyncer
+	switch config.Output {
+	case "", "stdout":
+		consoleOutput = zapcore.AddSync(os.Stdout)
+	case "stderr":
+		consoleOutput = zapcore.AddSync(os.Stderr)
+	default:
+		// If output is a file path but EnableFile is false, treat as console output
+		if !config.EnableFile {
+			file, err := getOutputFile(config.Output)
+			if err != nil {
+				return fmt.Errorf("failed to initialize output: %w", err)
+			}
+			consoleOutput = zapcore.AddSync(file)
+		} else {
+			consoleOutput = zapcore.AddSync(os.Stdout)
+		}
+	}
+	writers = append(writers, consoleOutput)
+
+	// Add file output if enabled (in addition to console)
 	if config.EnableFile && config.FilePath != "" {
-		// Use file path when EnableFile is true
-		output, err = getOutput(config.FilePath)
+		file, err := getOutputFile(config.FilePath)
 		if err != nil {
 			return fmt.Errorf("failed to initialize file output: %w", err)
 		}
+		writers = append(writers, zapcore.AddSync(file))
+	}
+
+	// Combine all writers
+	var output zapcore.WriteSyncer
+	if len(writers) == 1 {
+		output = writers[0]
 	} else {
-		// Use regular output (stdout/stderr) when EnableFile is false
-		output, err = getOutput(config.Output)
-		if err != nil {
-			return fmt.Errorf("failed to initialize output: %w", err)
+		output = zapcore.NewMultiWriteSyncer(writers...)
+	}
+
+	// Create encoder config with proper caller information
+	var encoderConfig zapcore.EncoderConfig
+	if config.Format == "json" {
+		encoderConfig = zap.NewProductionEncoderConfig()
+		encoderConfig.TimeKey = "time"
+		encoderConfig.LevelKey = "level"
+		encoderConfig.MessageKey = "msg"
+		encoderConfig.CallerKey = "source"
+		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		encoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+		encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
+	} else {
+		// Compact format
+		encoderConfig = zap.NewDevelopmentEncoderConfig()
+		encoderConfig.TimeKey = "time"
+		encoderConfig.LevelKey = "level"
+		encoderConfig.MessageKey = "msg"
+		encoderConfig.CallerKey = "source"
+		encoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.Format("2006-01-02T15:04:05.000-0700"))
+		}
+		encoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+		encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
+
+		if config.EnableColor {
+			encoderConfig.EncodeLevel = zapcore.LowercaseColorLevelEncoder
 		}
 	}
 
-	var handler slog.Handler
-	opts := &slog.HandlerOptions{
-		Level:     level,
-		AddSource: config.AddSource,
+	// Create encoder
+	var encoder zapcore.Encoder
+	if config.Format == "json" {
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	} else {
+		encoder = NewZapCompactEncoder(encoderConfig, config.EnableColor)
 	}
 
-	switch config.Format {
-	case "json":
-		handler = slog.NewJSONHandler(output, opts)
-	case "compact":
-		handler = NewCompactTextHandler(output, opts, config.EnableColor)
-	default:
-		handler = slog.NewTextHandler(output, opts)
+	// Create core with proper caller skip
+	core := zapcore.NewCore(encoder, output, level)
+
+	var zapLogger *zap.Logger
+	if config.AddSource {
+		// Add caller with proper skip level to get real caller
+		zapLogger = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+	} else {
+		zapLogger = zap.New(core)
 	}
 
-	slogLogger := slog.New(handler)
-	defaultLogger = &Logger{Logger: slogLogger}
-
-	// Set as default slog logger
-	slog.SetDefault(slogLogger)
+	defaultLogger = &Logger{
+		zap:    zapLogger,
+		fields: make(map[string]interface{}),
+	}
 
 	return nil
 }
@@ -83,24 +140,40 @@ func Initialize(config LoggerConfig) error {
 func GetDefault() *Logger {
 	if defaultLogger == nil {
 		// Fallback to a basic logger if not initialized
-		handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
-		defaultLogger = &Logger{Logger: slog.New(handler)}
+		config := zap.NewDevelopmentConfig()
+		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+		zapLogger, _ := config.Build(zap.AddCallerSkip(1))
+		defaultLogger = &Logger{
+			zap:    zapLogger,
+			fields: make(map[string]interface{}),
+		}
 	}
 	return defaultLogger
 }
 
 // WithFields creates a new logger with additional fields
 func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
-	args := make([]interface{}, 0, len(fields)*2)
-	for key, value := range fields {
-		args = append(args, key, value)
+	newFields := make(map[string]interface{})
+	for k, v := range l.fields {
+		newFields[k] = v
 	}
-	return &Logger{Logger: l.Logger.With(args...)}
+	for k, v := range fields {
+		newFields[k] = v
+	}
+
+	zapFields := make([]zap.Field, 0, len(fields))
+	for key, value := range fields {
+		zapFields = append(zapFields, zap.Any(key, value))
+	}
+	return &Logger{
+		zap:    l.zap.With(zapFields...),
+		fields: newFields,
+	}
 }
 
 // WithField creates a new logger with a single additional field
 func (l *Logger) WithField(key string, value interface{}) *Logger {
-	return &Logger{Logger: l.Logger.With(key, value)}
+	return l.WithFields(map[string]interface{}{key: value})
 }
 
 // WithRequestID creates a new logger with a request ID field
@@ -123,31 +196,92 @@ func (l *Logger) WithError(err error) *Logger {
 	return l.WithField("error", err.Error())
 }
 
+// Core logging methods
+func (l *Logger) Info(msg string, args ...any) {
+	if len(args) > 0 {
+		zapFields := make([]zap.Field, 0, len(args)/2)
+		for i := 0; i < len(args)-1; i += 2 {
+			if key, ok := args[i].(string); ok {
+				zapFields = append(zapFields, zap.Any(key, args[i+1]))
+			}
+		}
+		l.zap.Info(msg, zapFields...)
+	} else {
+		l.zap.Info(msg)
+	}
+}
+
+func (l *Logger) Debug(msg string, args ...any) {
+	if len(args) > 0 {
+		zapFields := make([]zap.Field, 0, len(args)/2)
+		for i := 0; i < len(args)-1; i += 2 {
+			if key, ok := args[i].(string); ok {
+				zapFields = append(zapFields, zap.Any(key, args[i+1]))
+			}
+		}
+		l.zap.Debug(msg, zapFields...)
+	} else {
+		l.zap.Debug(msg)
+	}
+}
+
+func (l *Logger) Warn(msg string, args ...any) {
+	if len(args) > 0 {
+		zapFields := make([]zap.Field, 0, len(args)/2)
+		for i := 0; i < len(args)-1; i += 2 {
+			if key, ok := args[i].(string); ok {
+				zapFields = append(zapFields, zap.Any(key, args[i+1]))
+			}
+		}
+		l.zap.Warn(msg, zapFields...)
+	} else {
+		l.zap.Warn(msg)
+	}
+}
+
+func (l *Logger) Error(msg string, args ...any) {
+	if len(args) > 0 {
+		zapFields := make([]zap.Field, 0, len(args)/2)
+		for i := 0; i < len(args)-1; i += 2 {
+			if key, ok := args[i].(string); ok {
+				zapFields = append(zapFields, zap.Any(key, args[i+1]))
+			}
+		}
+		l.zap.Error(msg, zapFields...)
+	} else {
+		l.zap.Error(msg)
+	}
+}
+
 // Formatted logging methods for Logger struct
 // Infof logs at Info level with printf-style formatting
 func (l *Logger) Infof(format string, args ...interface{}) {
-	l.Logger.Info(fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf(format, args...)
+	l.zap.Info(msg)
 }
 
 // Debugf logs at Debug level with printf-style formatting
 func (l *Logger) Debugf(format string, args ...interface{}) {
-	l.Logger.Debug(fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf(format, args...)
+	l.zap.Debug(msg)
 }
 
 // Warnf logs at Warn level with printf-style formatting
 func (l *Logger) Warnf(format string, args ...interface{}) {
-	l.Logger.Warn(fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf(format, args...)
+	l.zap.Warn(msg)
 }
 
 // Errorf logs at Error level with printf-style formatting
 func (l *Logger) Errorf(format string, args ...interface{}) {
-	l.Logger.Error(fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf(format, args...)
+	l.zap.Error(msg)
 }
 
 // Fatalf logs at Error level with printf-style formatting and exits
 func (l *Logger) Fatalf(format string, args ...interface{}) {
-	l.Logger.Error(fmt.Sprintf(format, args...))
-	os.Exit(1)
+	msg := fmt.Sprintf(format, args...)
+	l.zap.Fatal(msg)
 }
 
 // Context operations
@@ -191,24 +325,23 @@ func LoggerWithRequestIDFromContext(ctx context.Context) *Logger {
 
 // Convenience functions for default logger with proper caller information
 func Info(msg string, args ...any) {
-	GetDefault().Info(msg, args...)
+	GetDefault().zap.Info(msg, convertToZapFields(args...)...)
 }
 
 func Debug(msg string, args ...any) {
-	GetDefault().Debug(msg, args...)
+	GetDefault().zap.Debug(msg, convertToZapFields(args...)...)
 }
 
 func Warn(msg string, args ...any) {
-	GetDefault().Warn(msg, args...)
+	GetDefault().zap.Warn(msg, convertToZapFields(args...)...)
 }
 
 func Error(msg string, args ...any) {
-	GetDefault().Error(msg, args...)
+	GetDefault().zap.Error(msg, convertToZapFields(args...)...)
 }
 
 func Fatal(msg string, args ...any) {
-	GetDefault().Error(msg, args...)
-	os.Exit(1)
+	GetDefault().zap.Fatal(msg, convertToZapFields(args...)...)
 }
 
 // Formatted convenience functions for default logger
@@ -253,40 +386,47 @@ func WithComponent(component string) *Logger {
 }
 
 // Helper functions
-func parseLogLevel(level string) (slog.Level, error) {
+func parseZapLogLevel(level string) (zapcore.Level, error) {
 	switch level {
 	case "debug", "DEBUG":
-		return slog.LevelDebug, nil
+		return zap.DebugLevel, nil
 	case "info", "INFO":
-		return slog.LevelInfo, nil
+		return zap.InfoLevel, nil
 	case "warn", "WARN", "warning", "WARNING":
-		return slog.LevelWarn, nil
+		return zap.WarnLevel, nil
 	case "error", "ERROR":
-		return slog.LevelError, nil
+		return zap.ErrorLevel, nil
 	default:
-		return slog.LevelInfo, nil
+		return zap.InfoLevel, nil
 	}
 }
 
-func getOutput(output string) (io.Writer, error) {
-	switch output {
-	case "", "stdout":
-		return os.Stdout, nil
-	case "stderr":
-		return os.Stderr, nil
-	default:
-		// Assume it's a file path - create directory if it doesn't exist
-		dir := filepath.Dir(output)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create log directory %s: %w", dir, err)
-		}
-
-		file, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open log file %s: %w", output, err)
-		}
-		return file, nil
+func getOutputFile(output string) (*os.File, error) {
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(output)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create log directory %s: %w", dir, err)
 	}
+
+	file, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file %s: %w", output, err)
+	}
+	return file, nil
+}
+
+func convertToZapFields(args ...any) []zap.Field {
+	if len(args) == 0 {
+		return nil
+	}
+
+	zapFields := make([]zap.Field, 0, len(args)/2)
+	for i := 0; i < len(args)-1; i += 2 {
+		if key, ok := args[i].(string); ok {
+			zapFields = append(zapFields, zap.Any(key, args[i+1]))
+		}
+	}
+	return zapFields
 }
 
 // Structured logging helpers
@@ -320,128 +460,12 @@ func LogServiceCall(logger *Logger, service, method string, duration time.Durati
 	}).Debug("Service method called")
 }
 
-// ANSI color codes
-const (
-	ColorReset  = "\033[0m"
-	ColorGray   = "\033[90m" // Timestamp
-	ColorBlue   = "\033[34m" // Debug
-	ColorGreen  = "\033[32m" // Info
-	ColorYellow = "\033[33m" // Warn
-	ColorRed    = "\033[31m" // Error
-	ColorCyan   = "\033[36m" // Source
-)
-
-// CompactTextHandler is a custom slog handler that formats logs in a compact format
-// Format: 2025-06-20T21:26:54.635+0700    info    cmd/cmd.go:52   message
-type CompactTextHandler struct {
-	writer      io.Writer
-	opts        *slog.HandlerOptions
-	enableColor bool
-}
-
-func NewCompactTextHandler(w io.Writer, opts *slog.HandlerOptions, enableColor bool) *CompactTextHandler {
-	if opts == nil {
-		opts = &slog.HandlerOptions{}
+// NewZapCompactEncoder creates a custom Zap encoder for compact format
+func NewZapCompactEncoder(cfg zapcore.EncoderConfig, enableColor bool) zapcore.Encoder {
+	if enableColor {
+		cfg.EncodeLevel = zapcore.LowercaseColorLevelEncoder
+	} else {
+		cfg.EncodeLevel = zapcore.LowercaseLevelEncoder
 	}
-
-	// For now, trust the user's enableColor setting
-	// Terminal detection can be unreliable in some environments
-	actualEnableColor := enableColor
-
-	return &CompactTextHandler{
-		writer:      w,
-		opts:        opts,
-		enableColor: actualEnableColor,
-	}
-}
-
-func (h *CompactTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.opts.Level.Level()
-}
-
-func (h *CompactTextHandler) Handle(ctx context.Context, record slog.Record) error {
-	var buf strings.Builder
-
-	// Timestamp with timezone (gray if colors enabled)
-	if h.enableColor {
-		buf.WriteString(ColorGray)
-	}
-	buf.WriteString(record.Time.Format("2006-01-02T15:04:05.000-0700"))
-	if h.enableColor {
-		buf.WriteString(ColorReset)
-	}
-	buf.WriteString("\t")
-
-	// Level (lowercase with color)
-	levelStr := strings.ToLower(record.Level.String())
-	if h.enableColor {
-		switch record.Level {
-		case slog.LevelDebug:
-			buf.WriteString(ColorBlue)
-		case slog.LevelInfo:
-			buf.WriteString(ColorGreen)
-		case slog.LevelWarn:
-			buf.WriteString(ColorYellow)
-		case slog.LevelError:
-			buf.WriteString(ColorRed)
-		}
-	}
-	buf.WriteString(levelStr)
-	if h.enableColor {
-		buf.WriteString(ColorReset)
-	}
-	buf.WriteString("\t")
-
-	// Source file and line (cyan if colors enabled)
-	if h.opts.AddSource && record.PC != 0 {
-		fs := runtime.CallersFrames([]uintptr{record.PC})
-		f, _ := fs.Next()
-		if f.File != "" {
-			// Extract just the filename, not the full path
-			filename := filepath.Base(f.File)
-			// if h.enableColor {
-			// 	buf.WriteString(ColorCyan)
-			// }
-			buf.WriteString(fmt.Sprintf("%s:%d", filename, f.Line))
-			if h.enableColor {
-				buf.WriteString(ColorReset)
-			}
-		}
-	}
-	buf.WriteString("\t")
-
-	// Message (no color)
-	buf.WriteString(record.Message)
-
-	// Add attributes if any
-	record.Attrs(func(attr slog.Attr) bool {
-		buf.WriteString(" ")
-		// if h.enableColor {
-		// 	buf.WriteString(ColorCyan)
-		// }
-		buf.WriteString(attr.Key)
-		if h.enableColor {
-			buf.WriteString(ColorReset)
-		}
-		buf.WriteString("=")
-		buf.WriteString(fmt.Sprintf("%v", attr.Value.Any()))
-		return true
-	})
-
-	buf.WriteString("\n")
-
-	_, err := h.writer.Write([]byte(buf.String()))
-	return err
-}
-
-func (h *CompactTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	// For simplicity, return the same handler
-	// In a full implementation, you'd create a new handler with additional attrs
-	return h
-}
-
-func (h *CompactTextHandler) WithGroup(name string) slog.Handler {
-	// For simplicity, return the same handler
-	// In a full implementation, you'd handle grouping
-	return h
+	return zapcore.NewConsoleEncoder(cfg)
 }
