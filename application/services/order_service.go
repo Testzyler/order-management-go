@@ -124,7 +124,7 @@ func (s *OrderService) UpdateOrder(ctx context.Context, order models.UpdateOrder
 		Status:    order.Status,
 		UpdatedAt: time.Now(),
 	}
-	
+
 	err := s.repo.UpdateOrder(ctx, orderToUpdate)
 	if err != nil {
 		serviceLogger.WithError(err).Error("Failed to update order", "order_id", order.ID)

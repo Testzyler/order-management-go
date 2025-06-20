@@ -62,7 +62,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 		orderWithItems := &models.OrderWithItems{Order: order}
 		orderMap[order.ID] = orderWithItems
 	}
-	
+
 	if len(orderIDs) == 0 {
 		return &models.ListPaginatedOrders{
 			Data:       []models.OrderWithItems{},
@@ -107,7 +107,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 		repoLogger.WithError(err).Error("Error scanning order items")
 		return nil, fmt.Errorf("error scanning order items: %w", err)
 	}
-	
+
 	return &models.ListPaginatedOrders{
 		Data:       orderWithItems,
 		Total:      total,
