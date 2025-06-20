@@ -23,9 +23,7 @@ func NewOrderRepository(db *pgxpool.Pool) *orderRepository {
 }
 
 func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error) {
-	// Use logger with request ID from context
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
-	repoLogger.Debug("Fetching order from database")
 
 	if input.Page < 1 {
 		input.Page = 1
@@ -43,6 +41,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 
 	rows, err := r.db.Query(ctx, queryOrders, input.Size, offset)
 	if err != nil {
+		repoLogger.WithError(err).Error("Failed to query orders")
 		return nil, err
 	}
 	defer rows.Close()
@@ -56,12 +55,14 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 	for rows.Next() {
 		var order models.Order
 		if err := rows.Scan(&total, &order.ID, &order.CustomerName, &order.TotalAmount, &order.Status, &order.CreatedAt, &order.UpdatedAt); err != nil {
+			repoLogger.WithError(err).Error("Failed to scan order row")
 			return nil, err
 		}
 		orderIDs = append(orderIDs, order.ID)
 		orderWithItems := &models.OrderWithItems{Order: order}
 		orderMap[order.ID] = orderWithItems
 	}
+	
 	if len(orderIDs) == 0 {
 		return &models.ListPaginatedOrders{
 			Data:       []models.OrderWithItems{},
@@ -79,6 +80,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 
 	itemRows, err := r.db.Query(ctx, queryItems, orderIDs)
 	if err != nil {
+		repoLogger.WithError(err).Error("Failed to query order items")
 		return nil, err
 	}
 	defer itemRows.Close()
@@ -86,6 +88,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 	for itemRows.Next() {
 		var item models.OrderItem
 		if err := itemRows.Scan(&item.ID, &item.OrderID, &item.ProductName, &item.Quantity, &item.Price, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			repoLogger.WithError(err).Error("Failed to scan order item")
 			return nil, err
 		}
 		if orderMap[item.OrderID] != nil {
@@ -100,12 +103,11 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 	}
 
 	totalPages := (total + input.Size - 1) / input.Size
-	repoLogger.Debug("Orders fetched successfully", "total", total, "page", input.Page, "size", input.Size, "total_pages", totalPages)
 	if err := itemRows.Err(); err != nil {
 		repoLogger.WithError(err).Error("Error scanning order items")
 		return nil, fmt.Errorf("error scanning order items: %w", err)
 	}
-	repoLogger.Info("Order items fetched successfully", "item_count", len(orderWithItems))
+	
 	return &models.ListPaginatedOrders{
 		Data:       orderWithItems,
 		Total:      total,
@@ -116,9 +118,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 }
 
 func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
-	// Use logger with request ID from context
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
-	repoLogger.Debug("Fetching order from database", "order_id", id)
 
 	var result models.OrderWithItems
 	var order models.Order
@@ -127,8 +127,6 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 		FROM orders 
 		WHERE id = $1`
 
-	startTime := time.Now()
-	// Context cancellation is automatically handled by pgx
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&order.ID,
 		&order.CustomerName,
@@ -137,59 +135,39 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 		&order.CreatedAt,
 		&order.UpdatedAt,
 	)
-	queryDuration := time.Since(startTime)
 
 	if err != nil {
-		// Check if error is due to context cancellation
 		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order query cancelled by client",
-				"order_id", id,
-				"query_duration_ms", queryDuration.Milliseconds(),
-			)
+			repoLogger.Warn("Order query cancelled", "order_id", id)
 			return models.OrderWithItems{}, err
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order query timed out",
-				"order_id", id,
-				"query_duration_ms", queryDuration.Milliseconds(),
-			)
+			repoLogger.Warn("Order query timed out", "order_id", id)
 			return models.OrderWithItems{}, err
 		}
 		if err == sql.ErrNoRows {
-			repoLogger.Warn("Order not found in database", "order_id", id, "query_duration_ms", queryDuration.Milliseconds())
 			return models.OrderWithItems{}, err
 		}
-		repoLogger.WithError(err).Error("Failed to query order", "order_id", id, "query_duration_ms", queryDuration.Milliseconds())
+		repoLogger.WithError(err).Error("Failed to query order", "order_id", id)
 		return models.OrderWithItems{}, err
 	}
 
-	repoLogger.Debug("Order fetched, now fetching items", "order_id", id, "query_duration_ms", queryDuration.Milliseconds())
-
-	// Fetch order items - context cancellation handled automatically by pgx
+	// Fetch order items
 	itemQuery := `SELECT id, order_id, product_name, quantity, price, created_at, updated_at
 		FROM order_items
 		WHERE order_id = $1`
 
-	itemsStartTime := time.Now()
 	itemRows, err := r.db.Query(ctx, itemQuery, id)
 	if err != nil {
-		itemsQueryDuration := time.Since(itemsStartTime)
-		// Check if error is due to context cancellation
 		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order items query cancelled by client",
-				"order_id", id,
-				"items_query_duration_ms", itemsQueryDuration.Milliseconds(),
-			)
+			repoLogger.Warn("Order items query cancelled", "order_id", id)
 			return models.OrderWithItems{}, err
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order items query timed out",
-				"order_id", id,
-				"items_query_duration_ms", itemsQueryDuration.Milliseconds(),
-			)
+			repoLogger.Warn("Order items query timed out", "order_id", id)
 			return models.OrderWithItems{}, err
 		}
-		repoLogger.WithError(err).Error("Failed to fetch order items", "order_id", id, "items_query_duration_ms", itemsQueryDuration.Milliseconds())
+		repoLogger.WithError(err).Error("Failed to fetch order items", "order_id", id)
 		return models.OrderWithItems{}, fmt.Errorf("failed to fetch order items: %w", err)
 	}
 	defer itemRows.Close()
@@ -204,19 +182,9 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 		items = append(items, item)
 	}
 
-	itemsQueryDuration := time.Since(itemsStartTime)
-	totalDuration := time.Since(startTime)
-
 	result.Order = order
 	result.Items = items
 
-	repoLogger.Info("Order with items fetched successfully",
-		"order_id", id,
-		"item_count", len(items),
-		"order_query_duration_ms", queryDuration.Milliseconds(),
-		"items_query_duration_ms", itemsQueryDuration.Milliseconds(),
-		"total_duration_ms", totalDuration.Milliseconds(),
-	)
 	return result, nil
 }
 
