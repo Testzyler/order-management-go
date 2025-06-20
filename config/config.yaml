@@ -15,6 +15,6 @@ Logger:
   Format: compact
   Output: stdout
   AddSource: true
-  EnableColor: true
+  EnableColor: false
   EnableFile: false
   FilePath: ./logs/dev.log  # File path (not used when EnableFile is false)

@@ -29,8 +29,8 @@ var DBConfig = struct {
 }
 
 func InitializeDatabase() (*pgxpool.Pool, error) {
-	dblogger := logger.WithComponent("database")
-	dblogger.Info("Initializing database connection...")
+	log := logger.GetDefault().WithComponent("database")
+	log.Info("Initializing database connection...")
 
 	// Ensure configuration is loaded
 	userName := viper.GetString("Database.Username")
@@ -39,9 +39,6 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	port := viper.GetInt("Database.Port")
 	databaseName := viper.GetString("Database.DatabaseName")
 	databaseSchema := viper.GetString("Database.DatabaseSchema")
-
-	// Log configuration for debugging (remove in production)
-	dblogger.Infof("Connecting to database at %s:%d...", host, port)
 
 	connStr := fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=disable&search_path=%s",
@@ -63,7 +60,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	db.Config().MaxConns = 500
 	db.Config().MinIdleConns = 250
 	db.Config().MaxConnLifetime = 180 * time.Second
-	dblogger.Info("Database connection established successfully.")
+	log.Info("Database connection established successfully.")
 	return db, nil
 }
 
@@ -90,7 +87,8 @@ func ShutdownDatabase() error {
 }
 
 func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
-	logger.Info("Waiting for database to be ready...")
+	log := logger.GetDefault()
+	log.Info("Waiting for database to be ready...")
 
 	deadline := time.Now().Add(timeout)
 	for {
@@ -99,7 +97,7 @@ func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
 		cancel()
 
 		if err == nil {
-			logger.Info("Database is ready!")
+			log.Info("Database is ready!")
 			return nil
 		}
 
@@ -107,7 +105,7 @@ func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
 			return fmt.Errorf("database not ready after %s: %w", timeout, err)
 		}
 
-		logger.Info("Database not ready, retrying in 1 s...")
+		log.Info("Database not ready, retrying in 1 s...")
 		time.Sleep(1 * time.Second)
 	}
 }

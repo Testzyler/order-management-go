@@ -189,7 +189,7 @@ func LoggerWithRequestIDFromContext(ctx context.Context) *Logger {
 	return GetDefault()
 }
 
-// Convenience functions for default logger
+// Convenience functions for default logger with proper caller information
 func Info(msg string, args ...any) {
 	GetDefault().Info(msg, args...)
 }
