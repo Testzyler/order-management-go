@@ -301,10 +301,15 @@ func NewCompactTextHandler(w io.Writer, opts *slog.HandlerOptions, enableColor b
 	if opts == nil {
 		opts = &slog.HandlerOptions{}
 	}
+
+	// For now, trust the user's enableColor setting
+	// Terminal detection can be unreliable in some environments
+	actualEnableColor := enableColor
+
 	return &CompactTextHandler{
 		writer:      w,
 		opts:        opts,
-		enableColor: enableColor,
+		enableColor: actualEnableColor,
 	}
 }
 
@@ -314,8 +319,6 @@ func (h *CompactTextHandler) Enabled(ctx context.Context, level slog.Level) bool
 
 func (h *CompactTextHandler) Handle(ctx context.Context, record slog.Record) error {
 	var buf strings.Builder
-
-	// Format: timestamp + level + source + message + attributes
 
 	// Timestamp with timezone (gray if colors enabled)
 	if h.enableColor {

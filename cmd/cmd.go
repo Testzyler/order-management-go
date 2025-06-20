@@ -80,15 +80,16 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		logger.Infof("Using config file: %s", viper.ConfigFileUsed())
+		// Use fmt.Printf here since logger isn't initialized yet
+		fmt.Printf("Using config file: %s\n", viper.ConfigFileUsed())
 	} else {
-		logger.Error("Error reading config file: %v", err)
+		fmt.Printf("Error reading config file: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Verify database configuration
 	if !viper.IsSet("Database.Username") || !viper.IsSet("Database.Password") {
-		logger.Warn("Database configuration is missing or incomplete")
+		fmt.Println("Database configuration is missing or incomplete")
 		os.Exit(1)
 	}
 }
