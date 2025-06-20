@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/Testzyler/order-management-go/application/models"
 	"github.com/Testzyler/order-management-go/infrastructure/logger"
@@ -189,29 +188,11 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 }
 
 func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) (err error) {
-	// Use logger with request ID from context
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
-	startTime := time.Now()
 
-	repoLogger.Debug("Starting order creation transaction",
-		"customer_name", order.CustomerName,
-		"total_amount", order.TotalAmount,
-		"item_count", len(items),
-	)
-
-	// Begin transaction - context cancellation handled automatically by pgx
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Transaction begin cancelled by client")
-			return err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction begin timed out")
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to begin transaction for order creation")
+		repoLogger.WithError(err).Error("Failed to begin transaction")
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
@@ -222,143 +203,61 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 		}
 	}()
 
-	// Insert order - context cancellation handled automatically by pgx
+	// Insert order
 	insertOrderQuery := "INSERT INTO orders (customer_name, total_amount, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id"
 
-	repoLogger.Debug("Executing order insertion query")
-	insertStart := time.Now()
 	var insertedOrderID int
 	err = tx.QueryRow(ctx, insertOrderQuery, order.CustomerName, order.TotalAmount, order.Status, order.CreatedAt, order.UpdatedAt).Scan(&insertedOrderID)
-	insertDuration := time.Since(insertStart)
 
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order insertion cancelled by client",
-				"query_duration_ms", insertDuration.Milliseconds(),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Order insertion cancelled or timed out")
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order insertion timed out",
-				"query_duration_ms", insertDuration.Milliseconds(),
-			)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to insert order",
-			"customer_name", order.CustomerName,
-			"query_duration_ms", insertDuration.Milliseconds(),
-		)
+		repoLogger.WithError(err).Error("Failed to insert order", "customer", order.CustomerName)
 		return fmt.Errorf("failed to insert order: %w", err)
 	}
 
-	repoLogger.Debug("Order inserted successfully",
-		"order_id", insertedOrderID,
-		"customer_name", order.CustomerName,
-		"insert_duration_ms", insertDuration.Milliseconds(),
-	)
-
-	// Batch insert order items - context cancellation handled by pgx
+	// Insert order items
 	if len(items) > 0 {
 		insertItemsQuery := "INSERT INTO order_items (order_id, product_name, quantity, price, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)"
-
-		repoLogger.Debug("Executing batch order items insertion", "item_count", len(items))
-		batchStart := time.Now()
 
 		for i, item := range items {
 			_, err = tx.Exec(ctx, insertItemsQuery, insertedOrderID, item.ProductName, item.Quantity, item.Price, item.CreatedAt, item.UpdatedAt)
 			if err != nil {
-				// Check if error is due to context cancellation
-				if errors.Is(err, context.Canceled) {
-					repoLogger.Warn("Order items insertion cancelled by client",
-						"order_id", insertedOrderID,
-						"item_index", i,
-					)
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					repoLogger.Warn("Order items insertion cancelled or timed out", "order_id", insertedOrderID)
 					return err
 				}
-				if errors.Is(err, context.DeadlineExceeded) {
-					repoLogger.Warn("Order items insertion timed out",
-						"order_id", insertedOrderID,
-						"item_index", i,
-					)
-					return err
-				}
-				repoLogger.WithError(err).Error("Failed to insert order item",
-					"order_id", insertedOrderID,
-					"item_index", i,
-					"product_name", item.ProductName,
-				)
+				repoLogger.WithError(err).Error("Failed to insert order item", "order_id", insertedOrderID, "product", item.ProductName, "index", i)
 				return fmt.Errorf("failed to insert order item: %w", err)
 			}
 		}
-
-		batchDuration := time.Since(batchStart)
-		repoLogger.Debug("All order items inserted successfully",
-			"order_id", insertedOrderID,
-			"item_count", len(items),
-			"batch_duration_ms", batchDuration.Milliseconds(),
-		)
 	}
 
-	// Commit transaction - context cancellation handled by pgx
-	commitStart := time.Now()
+	// Commit transaction
 	if err = tx.Commit(ctx); err != nil {
-		commitDuration := time.Since(commitStart)
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Transaction commit cancelled by client",
-				"order_id", insertedOrderID,
-				"commit_duration_ms", commitDuration.Milliseconds(),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Transaction commit cancelled or timed out", "order_id", insertedOrderID)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction commit timed out",
-				"order_id", insertedOrderID,
-				"commit_duration_ms", commitDuration.Milliseconds(),
-			)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to commit order creation transaction",
-			"order_id", insertedOrderID,
-			"commit_duration_ms", commitDuration.Milliseconds(),
-		)
+		repoLogger.WithError(err).Error("Failed to commit transaction", "order_id", insertedOrderID)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	commitDuration := time.Since(commitStart)
-	totalDuration := time.Since(startTime)
 
-	repoLogger.Info("Order and items created successfully",
-		"order_id", insertedOrderID,
-		"customer_name", order.CustomerName,
-		"total_amount", order.TotalAmount,
-		"item_count", len(items),
-		"commit_duration_ms", commitDuration.Milliseconds(),
-		"total_duration_ms", totalDuration.Milliseconds(),
-	)
 	return nil
 }
 
 func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (err error) {
-	// Use logger with request ID from context
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
-	startTime := time.Now()
 
-	repoLogger.Debug("Starting order update transaction", "order_id", order.ID, "new_status", order.Status)
-
-	// Begin transaction - context cancellation handled automatically by pgx
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Transaction begin cancelled by client", "order_id", order.ID)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Transaction begin cancelled or timed out", "order_id", order.ID)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction begin timed out", "order_id", order.ID)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to begin transaction for order update", "order_id", order.ID)
+		repoLogger.WithError(err).Error("Failed to begin transaction", "order_id", order.ID)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
@@ -370,106 +269,45 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (
 	}()
 
 	query := "UPDATE orders SET status = $1, updated_at = $2 WHERE id = $3"
-
-	repoLogger.Debug("Executing order update query", "order_id", order.ID, "status", order.Status)
-	updateStart := time.Now()
-	// Context cancellation handled automatically by pgx
 	result, err := tx.Exec(ctx, query, order.Status, order.UpdatedAt, order.ID)
-	updateDuration := time.Since(updateStart)
 
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order update cancelled by client",
-				"order_id", order.ID,
-				"query_duration_ms", updateDuration.Milliseconds(),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Order update cancelled or timed out", "order_id", order.ID)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order update timed out",
-				"order_id", order.ID,
-				"query_duration_ms", updateDuration.Milliseconds(),
-			)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to execute order update query",
-			"order_id", order.ID,
-			"query_duration_ms", updateDuration.Milliseconds(),
-		)
+		repoLogger.WithError(err).Error("Failed to update order", "order_id", order.ID)
 		return fmt.Errorf("failed to update order: %w", err)
 	}
 
 	rowsAffected := result.RowsAffected()
-	repoLogger.Debug("Order update query executed",
-		"order_id", order.ID,
-		"rows_affected", rowsAffected,
-		"query_duration_ms", updateDuration.Milliseconds(),
-	)
-
 	if rowsAffected == 0 {
-		repoLogger.Warn("No rows affected by order update", "order_id", order.ID)
+		repoLogger.Warn("Order not found", "order_id", order.ID)
 		return fmt.Errorf("order with ID %d not found", order.ID)
 	}
 
-	// Commit transaction - context cancellation handled automatically by pgx
-	commitStart := time.Now()
 	if err = tx.Commit(ctx); err != nil {
-		commitDuration := time.Since(commitStart)
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Transaction commit cancelled by client",
-				"order_id", order.ID,
-				"commit_duration_ms", commitDuration.Milliseconds(),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Transaction commit cancelled or timed out", "order_id", order.ID)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction commit timed out",
-				"order_id", order.ID,
-				"commit_duration_ms", commitDuration.Milliseconds(),
-			)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to commit order update transaction",
-			"order_id", order.ID,
-			"commit_duration_ms", commitDuration.Milliseconds(),
-		)
+		repoLogger.WithError(err).Error("Failed to commit transaction", "order_id", order.ID)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	commitDuration := time.Since(commitStart)
-	totalDuration := time.Since(startTime)
 
-	repoLogger.Info("Order updated successfully",
-		"order_id", order.ID,
-		"status", order.Status,
-		"rows_affected", rowsAffected,
-		"commit_duration_ms", commitDuration.Milliseconds(),
-		"total_duration_ms", totalDuration.Milliseconds(),
-	)
 	return nil
 }
 
 func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
-	// Use logger with request ID from context
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
-	startTime := time.Now()
 
-	repoLogger.Debug("Starting order deletion transaction", "order_id", id)
-
-	// Begin transaction - context cancellation handled automatically by pgx
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Transaction begin cancelled by client", "order_id", id)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Transaction begin cancelled or timed out", "order_id", id)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction begin timed out", "order_id", id)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to begin transaction for order deletion", "order_id", id)
+		repoLogger.WithError(err).Error("Failed to begin transaction", "order_id", id)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
@@ -480,121 +318,44 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
 		}
 	}()
 
-	// First, delete order items - context cancellation handled automatically by pgx
+	// Delete order items first
 	deleteItemsQuery := "DELETE FROM order_items WHERE order_id = $1"
-
-	repoLogger.Debug("Executing order items deletion query", "order_id", id)
-	itemsDeleteStart := time.Now()
-	itemsResult, err := tx.Exec(ctx, deleteItemsQuery, id)
-	itemsDeleteDuration := time.Since(itemsDeleteStart)
-
+	_, err = tx.Exec(ctx, deleteItemsQuery, id)
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order items deletion cancelled by client",
-				"order_id", id,
-				"query_duration_ms", itemsDeleteDuration.Milliseconds(),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Order items deletion cancelled or timed out", "order_id", id)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order items deletion timed out",
-				"order_id", id,
-				"query_duration_ms", itemsDeleteDuration.Milliseconds(),
-			)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to delete order items",
-			"order_id", id,
-			"query_duration_ms", itemsDeleteDuration.Milliseconds(),
-		)
+		repoLogger.WithError(err).Error("Failed to delete order items", "order_id", id)
 		return fmt.Errorf("failed to delete order items: %w", err)
 	}
 
-	itemsAffected := itemsResult.RowsAffected()
-	repoLogger.Debug("Order items deleted",
-		"order_id", id,
-		"items_deleted", itemsAffected,
-		"items_delete_duration_ms", itemsDeleteDuration.Milliseconds(),
-	)
-
-	// Then, delete the order - context cancellation handled automatically by pgx
+	// Delete the order
 	deleteOrderQuery := "DELETE FROM orders WHERE id = $1"
-
-	repoLogger.Debug("Executing order deletion query", "order_id", id)
-	orderDeleteStart := time.Now()
 	orderResult, err := tx.Exec(ctx, deleteOrderQuery, id)
-	orderDeleteDuration := time.Since(orderDeleteStart)
-
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order deletion cancelled by client",
-				"order_id", id,
-				"query_duration_ms", orderDeleteDuration.Milliseconds(),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Order deletion cancelled or timed out", "order_id", id)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order deletion timed out",
-				"order_id", id,
-				"query_duration_ms", orderDeleteDuration.Milliseconds(),
-			)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to delete order",
-			"order_id", id,
-			"query_duration_ms", orderDeleteDuration.Milliseconds(),
-		)
+		repoLogger.WithError(err).Error("Failed to delete order", "order_id", id)
 		return fmt.Errorf("failed to delete order: %w", err)
 	}
 
 	orderRowsAffected := orderResult.RowsAffected()
-	repoLogger.Debug("Order deletion query executed",
-		"order_id", id,
-		"rows_affected", orderRowsAffected,
-		"query_duration_ms", orderDeleteDuration.Milliseconds(),
-	)
-
 	if orderRowsAffected == 0 {
-		repoLogger.Warn("No rows affected by order deletion", "order_id", id)
+		repoLogger.Warn("Order not found", "order_id", id)
 		return fmt.Errorf("order with ID %d not found", id)
 	}
 
-	// Commit transaction - context cancellation handled automatically by pgx
-	commitStart := time.Now()
 	if err = tx.Commit(ctx); err != nil {
-		commitDuration := time.Since(commitStart)
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Transaction commit cancelled by client",
-				"order_id", id,
-				"commit_duration_ms", commitDuration.Milliseconds(),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			repoLogger.Warn("Transaction commit cancelled or timed out", "order_id", id)
 			return err
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction commit timed out",
-				"order_id", id,
-				"commit_duration_ms", commitDuration.Milliseconds(),
-			)
-			return err
-		}
-		repoLogger.WithError(err).Error("Failed to commit order deletion transaction",
-			"order_id", id,
-			"commit_duration_ms", commitDuration.Milliseconds(),
-		)
+		repoLogger.WithError(err).Error("Failed to commit transaction", "order_id", id)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	commitDuration := time.Since(commitStart)
-	totalDuration := time.Since(startTime)
 
-	repoLogger.Info("Order and items deleted successfully",
-		"order_id", id,
-		"items_deleted", itemsAffected,
-		"order_rows_affected", orderRowsAffected,
-		"commit_duration_ms", commitDuration.Milliseconds(),
-		"total_duration_ms", totalDuration.Milliseconds(),
-	)
 	return nil
 }
