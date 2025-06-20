@@ -27,7 +27,7 @@ func (h *HealthHandler) GetRouteDefinition() RouteDefinition {
 				HandlerFunc: h.HealthCheck,
 			},
 		},
-		Prefix: "", // No prefix - this will be at root level
+		Prefix: "",
 	}
 }
 
