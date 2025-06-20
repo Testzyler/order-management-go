@@ -4,3 +4,4 @@ __debug_*
 *.swp
 *.swo
 *.bak
+bin/

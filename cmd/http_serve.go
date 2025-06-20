@@ -1,12 +1,11 @@
 package cmd
 
 import (
-	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	v1 "github.com/Testzyler/order-management-go/infrastructure/http/api/v1"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +24,7 @@ func initListenOsSignal() {
 					count++
 					// Get Twice Signal Force Exit without Waiting Close all Components
 					if count == 2 {
-						fmt.Println("Forcefully exiting")
+						log.Println("Forcefully exiting")
 						os.Exit(1)
 					}
 
@@ -37,8 +36,8 @@ func initListenOsSignal() {
 						shutdownHttpServer()
 					}()
 
-					fmt.Println("signal SIGKILL caught. shutting down")
-					fmt.Println("catching SIGKILL one more time will forcefully exit")
+					log.Println("signal SIGKILL caught. shutting down")
+					log.Println("catching SIGKILL one more time will forcefully exit")
 
 					wg.Done()
 				}
@@ -60,9 +59,6 @@ var ServeCmd = &cobra.Command{
 
 		// Init HTTP Server
 		initHttpServer()
-
-		// Initialize handlers after database is ready
-		v1.InitializeOrderHandler()
 
 		// Waiting for Component Shut Down
 		wg.Wait()

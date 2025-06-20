@@ -38,7 +38,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	databaseSchema := viper.GetString("Database.DatabaseSchema")
 
 	// Log configuration for debugging (remove in production)
-	fmt.Printf("Connecting to database at %s:%d...\n", host, port)
+	log.Printf("Connecting to database at %s:%d...\n", host, port)
 
 	connStr := fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=disable&search_path=%s",
@@ -61,7 +61,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	db.Config().MinIdleConns = 250
 	db.Config().MaxConnLifetime = 180 * time.Second
 
-	fmt.Println("Database connection established successfully.")
+	log.Println("Database connection established successfully.")
 	return db, nil
 }
 
@@ -73,7 +73,7 @@ func NewDatabaseConnection() (*pgxpool.Pool, error) {
 		}
 		DatabasePool = db
 	} else {
-		fmt.Println("Using existing database connection.")
+		log.Println("Using existing database connection.")
 	}
 
 	return DatabasePool, nil
@@ -82,7 +82,7 @@ func NewDatabaseConnection() (*pgxpool.Pool, error) {
 func ShutdownDatabase() error {
 	if DatabasePool != nil {
 		DatabasePool.Close()
-		fmt.Println("Database connection closed successfully.")
+		log.Println("Database connection closed successfully.")
 	}
 	return nil
 }

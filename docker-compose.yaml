@@ -23,7 +23,7 @@ services:
       - ./config/config.docker.yaml:/app/config/config.yaml
     command: ["./order-service", "http-serve"]
     deploy:
-      replicas: 5 
+      replicas: 1 
 
   postgres:
     image: postgres:latest
