@@ -11,6 +11,7 @@ import (
 	"github.com/Testzyler/order-management-go/application/repositories"
 	"github.com/Testzyler/order-management-go/application/services"
 	"github.com/Testzyler/order-management-go/infrastructure/http/api/route"
+	"github.com/Testzyler/order-management-go/infrastructure/http/middleware"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 )
@@ -75,23 +76,36 @@ func init() {
 }
 
 func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
+	// Get logger from context with component information
+	logger := middleware.GetLoggerFromFiberContext(c).WithComponent("order-handler")
+	logger.Info("Creating new order")
+
 	var input models.CreateOrderInput
 	ctx, cancel := context.WithCancel(c.Context())
 	defer cancel()
 
 	if err := c.BodyParser(&input); err != nil {
+		logger.WithError(err).Error("Failed to parse request body")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
 			"message": err.Error(),
 		})
 	}
 
+	logger.WithFields(map[string]interface{}{
+		"customer_name": input.CustomerName,
+		"item_count":    len(input.Items),
+		"status":        input.Status,
+	}).Debug("Parsed order input")
+
 	err := h.service.CreateOrder(ctx, input)
 	if err != nil {
+		logger.WithError(err).Error("Failed to create order")
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
 			"message": err.Error(),
 		})
 	}
 
+	logger.Info("Order created successfully")
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message": "Order created successfully",
 	})

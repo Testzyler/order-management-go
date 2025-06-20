@@ -10,6 +10,7 @@ import (
 
 	infrastructure "github.com/Testzyler/order-management-go/infrastructure/database"
 	"github.com/Testzyler/order-management-go/infrastructure/http"
+	"github.com/Testzyler/order-management-go/infrastructure/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,16 +30,26 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "serve http server",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Initialize logger first
+		if err := initLogger(); err != nil {
+			log.Fatalf("Failed to initialize logger: %v", err)
+		}
+
+		appLogger := logger.WithComponent("main")
+		appLogger.Info("Starting order management application")
+
 		// Initialize services
 		initPostgresql()
 		initHttpServer()
+
+		appLogger.Info("All services initialized successfully")
 
 		// Wait for interrupt signal to gracefully shut down the server
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
 
-		log.Println("Shutting down server...")
+		appLogger.Info("Shutting down server...")
 
 		// Shutdown services
 		shutdownHttpServer()
@@ -46,7 +57,7 @@ var serveCmd = &cobra.Command{
 
 		wg.Wait()
 
-		log.Println("Server gracefully stopped")
+		appLogger.Info("Server gracefully stopped")
 	},
 }
 
@@ -81,6 +92,26 @@ func initConfig() {
 		log.Println("Database configuration is missing or incomplete")
 		os.Exit(1)
 	}
+}
+
+func initLogger() error {
+	var loggerConfig logger.LoggerConfig
+	if err := viper.UnmarshalKey("Logger", &loggerConfig); err != nil {
+		return fmt.Errorf("failed to unmarshal logger config: %w", err)
+	}
+
+	// Set defaults if not provided
+	if loggerConfig.Level == "" {
+		loggerConfig.Level = "info"
+	}
+	if loggerConfig.Format == "" {
+		loggerConfig.Format = "json"
+	}
+	if loggerConfig.Output == "" {
+		loggerConfig.Output = "stdout"
+	}
+
+	return logger.Initialize(loggerConfig)
 }
 
 func initHttpServer() {
