@@ -1,11 +1,11 @@
 package http
 
 import (
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/Testzyler/order-management-go/infrastructure/http/api"
+	"github.com/Testzyler/order-management-go/infrastructure/http/api/route"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
@@ -14,14 +14,19 @@ var AppServer *fiber.App
 
 func InitHttpServer() {
 
+	// Initialize all handlers first (after database is ready)
+	route.InitializeAllHandlers()
+
 	// Config Port and Address
 	httpPort := viper.GetString("HttpServer.Port")
 	AppServer = fiber.New(fiber.Config{
+		Prefork: true,
 		ReadBufferSize:  1024 * 1024, // 1MB
 		WriteBufferSize: 1024 * 1024, // 1MB
 		ReadTimeout:     30 * time.Second,
 		WriteTimeout:    30 * time.Second,
 		IdleTimeout:     60 * time.Second,
+		
 	})
 
 	// Add Api Path (includes health check now)
@@ -37,7 +42,7 @@ func InitHttpServer() {
 	})
 
 	// Start Server
-	fmt.Printf("serving http at http://127.0.0.1:%s", httpPort)
+	log.Printf("serving http at http://127.0.0.1:%s", httpPort)
 	err := AppServer.Listen(":" + httpPort)
 	if err != nil {
 		log.Fatal(err)
@@ -45,10 +50,10 @@ func InitHttpServer() {
 }
 
 func ShutdownHttpServer() {
-	fmt.Println("http server is shutting down")
+	log.Println("http server is shutting down")
 	if err := AppServer.Shutdown(); err != nil {
-		fmt.Printf("http server shut down failed: %s", err)
+		log.Printf("http server shut down failed: %s", err)
 		return
 	}
-	fmt.Println("http server shut down completed")
+	log.Println("http server shut down completed")
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -37,7 +38,7 @@ var serveCmd = &cobra.Command{
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
 
-		fmt.Println("Shutting down server...")
+		log.Println("Shutting down server...")
 
 		// Shutdown services
 		shutdownHttpServer()
@@ -45,13 +46,13 @@ var serveCmd = &cobra.Command{
 
 		wg.Wait()
 
-		fmt.Println("Server gracefully stopped")
+		log.Println("Server gracefully stopped")
 	},
 }
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		os.Exit(1)
 	}
 }
@@ -69,15 +70,15 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Printf("Using config file: %s\n", viper.ConfigFileUsed())
+		log.Printf("Using config file: %s\n", viper.ConfigFileUsed())
 	} else {
-		fmt.Printf("Error reading config file: %v\n", err)
+		log.Printf("Error reading config file: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Verify database configuration
 	if !viper.IsSet("Database.Username") || !viper.IsSet("Database.Password") {
-		fmt.Println("Database configuration is missing or incomplete")
+		log.Println("Database configuration is missing or incomplete")
 		os.Exit(1)
 	}
 }
