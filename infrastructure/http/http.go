@@ -34,19 +34,18 @@ func InitHttpServer() {
 	// Add middleware
 	AppServer.Use(middleware.RecoveryMiddleware())
 	AppServer.Use(middleware.RequestIDMiddleware())
-	// AppServer.Use(middleware.LoggingMiddleware())
 
 	// Add Api Path (includes health check now)
 	apiGroup := AppServer.Group("/api")
 	api.AddRoute(&apiGroup)
 
 	// Add health check at root level
-	// AppServer.Get("/healthz", func(c *fiber.Ctx) error {
-	// 	return c.JSON(fiber.Map{
-	// 		"status":  "OK",
-	// 		"message": "Service is healthy",
-	// 	})
-	// })
+	AppServer.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":  "OK",
+			"message": "Service is healthy",
+		})
+	})
 
 	// Start Server
 	httpLogger.Info("Started HTTP server", "port", httpPort, "address", "127.0.0.1")
