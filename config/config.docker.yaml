@@ -5,7 +5,7 @@ HttpServer:
 Database:
   Username: dborder
   Password: SecretP@ssw0rd
-  Host: localhost
+  Host: postgres
   Port: 5432
   DatabaseName: store
   DatabaseSchema: store

@@ -21,7 +21,6 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
 	order := models.Order{
 		CustomerName: input.CustomerName,
-		TotalAmount:  input.TotalAmount,
 		Status:       models.StatusPending,
 	}
 
@@ -32,6 +31,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 			Quantity:    v.Quantity,
 			Price:       v.Price,
 		}
+		order.TotalAmount += v.Price * float64(v.Quantity)
 	}
 
 	err := s.repo.CreateOrder(ctx, order, items)
@@ -73,7 +73,7 @@ func (s *OrderService) DeleteOrder(ctx context.Context, id int) error {
 	return nil
 }
 
-func (s *OrderService) ListOrders(ctx context.Context, input models.ListOrdersInput) (models.ListPaginatedOrders, error) {
+func (s *OrderService) ListOrders(ctx context.Context, input models.ListInput) (models.ListPaginatedOrders, error) {
 	orders, err := s.repo.ListOrders(ctx, input)
 	if err != nil {
 		return models.ListPaginatedOrders{}, err

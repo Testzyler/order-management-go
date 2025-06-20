@@ -1,15 +1,17 @@
 package database
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
+	"log"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 )
 
-var DatabasePool *sql.DB
+var DatabasePool *pgxpool.Pool
 var DBConfig = struct {
 	Username       string
 	Password       string
@@ -26,7 +28,7 @@ var DBConfig = struct {
 	DatabaseSchema: viper.GetString("Database.DatabaseSchema"),
 }
 
-func InitializeDatabase() (*sql.DB, error) {
+func InitializeDatabase() (*pgxpool.Pool, error) {
 	// Ensure configuration is loaded
 	userName := viper.GetString("Database.Username")
 	password := viper.GetString("Database.Password")
@@ -43,27 +45,27 @@ func InitializeDatabase() (*sql.DB, error) {
 		userName, password, host, port, databaseName, databaseSchema,
 	)
 
-	db, err := sql.Open("postgres", connStr)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	db, err := pgxpool.New(ctx, connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Test the connection
-	err = db.Ping()
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	if err := waitForDatabase(db, 30*time.Second); err != nil {
+		log.Fatalf("DB connection failed: %v", err)
 	}
 
-	db.SetMaxOpenConns(100)
-	db.SetMaxIdleConns(100)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(time.Duration(180) * time.Second)
+	db.Config().MaxConns = 500
+	db.Config().MinIdleConns = 500
+	db.Config().MaxConnLifetime = 5 * time.Minute
 
 	fmt.Println("Database connection established successfully.")
 	return db, nil
 }
 
-func NewDatabaseConnection() (*sql.DB, error) {
+func NewDatabaseConnection() (*pgxpool.Pool, error) {
 	if DatabasePool == nil {
 		db, err := InitializeDatabase()
 		if err != nil {
@@ -79,13 +81,31 @@ func NewDatabaseConnection() (*sql.DB, error) {
 
 func ShutdownDatabase() error {
 	if DatabasePool != nil {
-		if err := DatabasePool.Close(); err != nil {
-			fmt.Printf("Error closing database connection: %v\n", err)
-			return err
-		} else {
-			fmt.Println("Database connection closed successfully.")
-			return nil
-		}
+		DatabasePool.Close()
+		fmt.Println("Database connection closed successfully.")
 	}
 	return nil
+}
+
+func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
+	log.Println("Waiting for database to be ready...")
+
+	deadline := time.Now().Add(timeout)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := pool.Ping(ctx)
+		cancel()
+
+		if err == nil {
+			log.Println("Database is ready!")
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("database not ready after %s: %w", timeout, err)
+		}
+
+		log.Println("Database not ready, retrying in 1s...")
+		time.Sleep(1 * time.Second)
+	}
 }

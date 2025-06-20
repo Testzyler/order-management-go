@@ -1,2 +1,6 @@
 __debug_*
 *-go
+.DS_Store
+*.swp
+*.swo
+*.bak

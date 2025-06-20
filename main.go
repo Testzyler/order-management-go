@@ -1,7 +1,12 @@
 package main
 
-import "github.com/Testzyler/order-management-go/cmd"
+import (
+	"runtime"
+
+	"github.com/Testzyler/order-management-go/cmd"
+)
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	cmd.Execute()
 }

@@ -28,7 +28,7 @@ var (
 	batchSizeFlag   int
 	concurrencyFlag int
 	apiURLFlag      string
-	totalTimeout    = 30 * time.Second
+	totalTimeout    = 60 * time.Second
 )
 
 func init() {
@@ -138,7 +138,7 @@ func sendBulkOrderRequest(ctx context.Context, order models.CreateOrderInput, ap
 	payload, err := json.Marshal(order)
 	if err != nil {
 		return fmt.Errorf("failed to marshal orders: %w", err)
-	}
+}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(payload))
 	if err != nil {
@@ -146,7 +146,15 @@ func sendBulkOrderRequest(ctx context.Context, order models.CreateOrderInput, ap
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxConnsPerHost:     500,
+			MaxIdleConns:        500,
+			MaxIdleConnsPerHost: 500,
+			IdleConnTimeout:     90 * time.Second,
+		},
+		Timeout: 10 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
