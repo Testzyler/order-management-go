@@ -1,6 +1,7 @@
 services:
   nginx:
     image: nginx:alpine
+    container_name: store_nginx
     depends_on:
       - order-service
       - postgres
