@@ -17,12 +17,12 @@ type Logger struct {
 }
 
 type LoggerConfig struct {
-	Level       string `yaml:"level" mapstructure:"level"`
-	Format      string `yaml:"format" mapstructure:"format"` // "json" or "compact"
-	AddSource   bool   `yaml:"add_source" mapstructure:"add_source"`
-	TimeFormat  string `yaml:"time_format" mapstructure:"time_format"`
-	Output      string `yaml:"output" mapstructure:"output"`             // "stdout", "stderr", or file path
-	EnableColor bool   `yaml:"enable_color" mapstructure:"enable_color"` // Enable colored output
+	Level       string `yaml:"Level" mapstructure:"level"`
+	Format      string `yaml:"Format" mapstructure:"format"` // "json" or "compact"
+	AddSource   bool   `yaml:"AddSource" mapstructure:"add_source"`
+	TimeFormat  string `yaml:"TimeFormat" mapstructure:"time_format"`
+	Output      string `yaml:"Output" mapstructure:"output"`             // "stdout", "stderr", or file path
+	EnableColor bool   `yaml:"EnableColor" mapstructure:"enable_color"` // Enable colored output
 }
 
 var (
@@ -52,7 +52,6 @@ func Initialize(config LoggerConfig) error {
 	case "json":
 		handler = slog.NewJSONHandler(output, opts)
 	case "compact":
-		// "compact" format uses the custom compact text handler
 		handler = NewCompactTextHandler(output, opts, config.EnableColor)
 	default:
 		handler = slog.NewTextHandler(output, opts)
@@ -148,6 +147,31 @@ func (l *Logger) ToContext(ctx context.Context) context.Context {
 func FromContext(ctx context.Context) *Logger {
 	if logger, ok := ctx.Value(contextKey).(*Logger); ok {
 		return logger
+	}
+	return GetDefault()
+}
+
+// Request ID context operations
+var requestIDKey = &struct{ name string }{"request_id"}
+
+// WithRequestIDToContext adds a request ID to the context
+func WithRequestIDToContext(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, requestIDKey, requestID)
+}
+
+// RequestIDFromContext retrieves the request ID from context
+func RequestIDFromContext(ctx context.Context) string {
+	if requestID, ok := ctx.Value(requestIDKey).(string); ok {
+		return requestID
+	}
+	return ""
+}
+
+// LoggerWithRequestIDFromContext creates a logger with request ID from context
+func LoggerWithRequestIDFromContext(ctx context.Context) *Logger {
+	requestID := RequestIDFromContext(ctx)
+	if requestID != "" {
+		return GetDefault().WithRequestID(requestID)
 	}
 	return GetDefault()
 }
@@ -357,9 +381,6 @@ func (h *CompactTextHandler) Handle(ctx context.Context, record slog.Record) err
 		if f.File != "" {
 			// Extract just the filename, not the full path
 			filename := filepath.Base(f.File)
-			if h.enableColor {
-				buf.WriteString(ColorCyan)
-			}
 			buf.WriteString(fmt.Sprintf("%s:%d", filename, f.Line))
 			if h.enableColor {
 				buf.WriteString(ColorReset)
@@ -373,10 +394,7 @@ func (h *CompactTextHandler) Handle(ctx context.Context, record slog.Record) err
 
 	// Add attributes if any
 	record.Attrs(func(attr slog.Attr) bool {
-		buf.WriteString("\t")
-		if h.enableColor {
-			buf.WriteString(ColorCyan)
-		}
+		buf.WriteString(" ")
 		buf.WriteString(attr.Key)
 		if h.enableColor {
 			buf.WriteString(ColorReset)

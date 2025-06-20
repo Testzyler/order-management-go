@@ -21,7 +21,8 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
-	serviceLogger := logger.WithComponent("order-service")
+	// Use logger with request ID from context
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
 	serviceLogger.Info("Creating new order", "customer_name", input.CustomerName)
 
 	order := models.Order{
@@ -40,10 +41,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	}
 
 	serviceLogger.WithFields(map[string]interface{}{
-		"customer_name": order.CustomerName,
-		"total_amount":  order.TotalAmount,
-		"item_count":    len(items),
-	}).Debug("Order prepared for creation")
+		"total_amount": order.TotalAmount,
+		"item_count":   len(items),
+	}).Debug("Calculated order totals")
 
 	err := s.repo.CreateOrder(ctx, order, items)
 	if err != nil {
@@ -51,16 +51,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 		return err
 	}
 
-	serviceLogger.WithFields(map[string]interface{}{
-		"customer_name": order.CustomerName,
-		"total_amount":  order.TotalAmount,
-	}).Info("Order created successfully")
-
+	serviceLogger.Info("Order created successfully in service layer")
 	return nil
 }
 
 func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
-	serviceLogger := logger.WithComponent("order-service")
+	// Use logger with request ID from context
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
 	serviceLogger.Debug("Retrieving order by ID", "order_id", id)
 
 	order, err := s.repo.GetOrderById(ctx, id)
@@ -78,7 +75,8 @@ func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.OrderWi
 }
 
 func (s *OrderService) UpdateOrder(ctx context.Context, order models.UpdateOrderInput) error {
-	serviceLogger := logger.WithComponent("order-service")
+	// Use logger with request ID from context
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
 	serviceLogger.Info("Updating order", "order_id", order.ID, "new_status", order.Status)
 
 	orderToUpdate := models.Order{
@@ -98,17 +96,31 @@ func (s *OrderService) UpdateOrder(ctx context.Context, order models.UpdateOrder
 }
 
 func (s *OrderService) DeleteOrder(ctx context.Context, id int) error {
+	// Use logger with request ID from context
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
+	serviceLogger.Info("Deleting order", "order_id", id)
+
 	err := s.repo.DeleteOrder(ctx, id)
 	if err != nil {
+		serviceLogger.WithError(err).Error("Failed to delete order in repository", "order_id", id)
 		return err
 	}
+
+	serviceLogger.Info("Order deleted successfully", "order_id", id)
 	return nil
 }
 
 func (s *OrderService) ListOrders(ctx context.Context, input models.ListInput) (models.ListPaginatedOrders, error) {
+	// Use logger with request ID from context
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
+	serviceLogger.Debug("Listing orders", "page", input.Page, "size", input.Size)
+
 	orders, err := s.repo.ListOrders(ctx, input)
 	if err != nil {
+		serviceLogger.WithError(err).Error("Failed to list orders from repository", "page", input.Page, "size", input.Size)
 		return models.ListPaginatedOrders{}, err
 	}
+
+	serviceLogger.Info("Orders listed successfully", "page", input.Page, "size", input.Size, "total", orders.Total)
 	return *orders, nil
 }

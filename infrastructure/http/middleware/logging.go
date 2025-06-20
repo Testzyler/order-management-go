@@ -36,6 +36,10 @@ func LoggingMiddleware() fiber.Handler {
 		// Get request ID from locals
 		requestID, _ := c.Locals("request_id").(string)
 
+		// Add request ID to the Fiber context so it can be passed to handlers
+		ctx := logger.WithRequestIDToContext(c.Context(), requestID)
+		c.SetUserContext(ctx)
+
 		// Create logger with request context
 		requestLogger := logger.GetDefault().WithFields(map[string]interface{}{
 			"request_id": requestID,

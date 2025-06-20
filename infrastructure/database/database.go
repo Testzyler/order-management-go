@@ -29,6 +29,9 @@ var DBConfig = struct {
 }
 
 func InitializeDatabase() (*pgxpool.Pool, error) {
+	dblogger := logger.WithComponent("database")
+	dblogger.Info("Initializing database connection...")
+
 	// Ensure configuration is loaded
 	userName := viper.GetString("Database.Username")
 	password := viper.GetString("Database.Password")
@@ -38,7 +41,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	databaseSchema := viper.GetString("Database.DatabaseSchema")
 
 	// Log configuration for debugging (remove in production)
-	logger.Infof("Connecting to database at %s:%d...", host, port)
+	dblogger.Infof("Connecting to database at %s:%d...", host, port)
 
 	connStr := fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=disable&search_path=%s",
@@ -60,7 +63,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	db.Config().MaxConns = 500
 	db.Config().MinIdleConns = 250
 	db.Config().MaxConnLifetime = 180 * time.Second
-	logger.Info("Database connection established successfully.")
+	dblogger.Info("Database connection established successfully.")
 	return db, nil
 }
 

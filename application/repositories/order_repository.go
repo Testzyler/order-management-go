@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Testzyler/order-management-go/application/models"
+	"github.com/Testzyler/order-management-go/infrastructure/logger"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -105,7 +106,12 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 }
 
 func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
+	// Use logger with request ID from context
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
+	repoLogger.Debug("Fetching order from database", "order_id", id)
+
 	if err := ctx.Err(); err != nil {
+		repoLogger.WithError(err).Error("Context error before query", "order_id", id)
 		return models.OrderWithItems{}, err
 	}
 	var result models.OrderWithItems
@@ -125,16 +131,22 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			repoLogger.Warn("Order not found in database", "order_id", id)
 			return models.OrderWithItems{}, nil
 		}
+		repoLogger.WithError(err).Error("Failed to query order", "order_id", id)
 		return models.OrderWithItems{}, err
 	}
+
+	repoLogger.Debug("Order fetched, now fetching items", "order_id", id)
+
 	// Fetch order items
 	itemQuery := `	SELECT id, order_id, product_name, quantity, price, created_at, updated_at
 		FROM order_items
 		WHERE order_id = $1`
 	itemRows, err := r.db.Query(ctx, itemQuery, id)
 	if err != nil {
+		repoLogger.WithError(err).Error("Failed to fetch order items", "order_id", id)
 		return models.OrderWithItems{}, fmt.Errorf("failed to fetch order items: %w", err)
 	}
 	defer itemRows.Close()
@@ -142,18 +154,26 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 	for itemRows.Next() {
 		var item models.OrderItem
 		if err := itemRows.Scan(&item.ID, &item.OrderID, &item.ProductName, &item.Quantity, &item.Price, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			repoLogger.WithError(err).Error("Failed to scan order item", "order_id", id)
 			return models.OrderWithItems{}, fmt.Errorf("failed to scan order item: %w", err)
 		}
 		items = append(items, item)
 	}
 	result.Order = order
 	result.Items = items
+
+	repoLogger.Info("Order with items fetched successfully", "order_id", id, "item_count", len(items))
 	return result, nil
 }
 
 func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) (err error) {
+	// Use logger with request ID from context
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
+	repoLogger.Debug("Creating order in database", "customer_name", order.CustomerName, "item_count", len(items))
+
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
+		repoLogger.WithError(err).Error("Failed to begin transaction")
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
@@ -166,8 +186,11 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 	orderQuery := "INSERT INTO orders (customer_name, total_amount, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id"
 	err = tx.QueryRow(ctx, orderQuery, order.CustomerName, order.TotalAmount, order.Status, timeNow, timeNow).Scan(&insertedOrderID)
 	if err != nil {
+		repoLogger.WithError(err).Error("Failed to insert order")
 		return fmt.Errorf("failed to insert order: %w", err)
 	}
+
+	repoLogger.Debug("Order inserted successfully", "order_id", insertedOrderID)
 
 	// Batch insert order items if any
 	if len(items) > 0 {
@@ -183,15 +206,20 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 			pgx.CopyFromRows(rows),
 		)
 		if err != nil {
+			repoLogger.WithError(err).Error("Failed to batch insert order items", "order_id", insertedOrderID, "item_count", len(items))
 			return fmt.Errorf("failed to batch insert order items: %w", err)
 		}
+
+		repoLogger.Debug("Order items inserted successfully", "order_id", insertedOrderID, "item_count", len(items))
 	}
 
 	// Commit the transaction
 	if err = tx.Commit(ctx); err != nil {
+		repoLogger.WithError(err).Error("Failed to commit transaction", "order_id", insertedOrderID)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	repoLogger.Info("Order created successfully in database", "order_id", insertedOrderID, "customer_name", order.CustomerName)
 	return nil
 }
 

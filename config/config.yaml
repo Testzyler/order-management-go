@@ -11,9 +11,8 @@ Database:
   DatabaseSchema: store
 
 Logger:
-  level: debug
-  format: compact  # json or compact
-  add_source: true
-  time_format: "2006-01-02T15:04:05.000Z"
-  output: stdout  # stdout, stderr, or file path
-  enable_color: true  # Enable colored output for compact format
+  Format: compact
+  Level: info
+  AddSource: true
+  Output: /log/app.log # Docker can collect these logs
+  EnableColor: true  # Enable colored output for compact format
