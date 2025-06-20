@@ -3,9 +3,9 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/Testzyler/order-management-go/infrastructure/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
@@ -38,7 +38,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	databaseSchema := viper.GetString("Database.DatabaseSchema")
 
 	// Log configuration for debugging (remove in production)
-	log.Printf("Connecting to database at %s:%d...\n", host, port)
+	logger.Infof("Connecting to database at %s:%d...", host, port)
 
 	connStr := fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=disable&search_path=%s",
@@ -54,14 +54,13 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 
 	// Test the connection
 	if err := waitForDatabase(db, 30*time.Second); err != nil {
-		log.Fatalf("DB connection failed: %v", err)
+		logger.Fatal("DB connection failed", "error", err)
 	}
 
 	db.Config().MaxConns = 500
 	db.Config().MinIdleConns = 250
 	db.Config().MaxConnLifetime = 180 * time.Second
-
-	log.Println("Database connection established successfully.")
+	logger.Info("Database connection established successfully.")
 	return db, nil
 }
 
@@ -73,7 +72,7 @@ func NewDatabaseConnection() (*pgxpool.Pool, error) {
 		}
 		DatabasePool = db
 	} else {
-		log.Println("Using existing database connection.")
+		logger.Info("Using existing database connection.")
 	}
 
 	return DatabasePool, nil
@@ -82,13 +81,13 @@ func NewDatabaseConnection() (*pgxpool.Pool, error) {
 func ShutdownDatabase() error {
 	if DatabasePool != nil {
 		DatabasePool.Close()
-		log.Println("Database connection closed successfully.")
+		logger.Info("Database connection closed successfully.")
 	}
 	return nil
 }
 
 func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
-	log.Println("Waiting for database to be ready...")
+	logger.Info("Waiting for database to be ready...")
 
 	deadline := time.Now().Add(timeout)
 	for {
@@ -97,7 +96,7 @@ func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
 		cancel()
 
 		if err == nil {
-			log.Println("Database is ready!")
+			logger.Info("Database is ready!")
 			return nil
 		}
 
@@ -105,7 +104,7 @@ func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
 			return fmt.Errorf("database not ready after %s: %w", timeout, err)
 		}
 
-		log.Println("Database not ready, retrying in 1s...")
+		logger.Info("Database not ready, retrying in 1 s...")
 		time.Sleep(1 * time.Second)
 	}
 }

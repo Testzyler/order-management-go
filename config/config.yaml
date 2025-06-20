@@ -12,7 +12,8 @@ Database:
 
 Logger:
   Level: debug
-  Format: json  # json or text
+  Format: compact  # json or compact
   AddSource: true
   TimeFormat: "2006-01-02T15:04:05.000Z"
   Output: stdout  # stdout, stderr, or file path
+  EnableColor: true  # Enable colored output for compact format

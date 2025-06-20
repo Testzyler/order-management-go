@@ -1,7 +1,6 @@
 package http
 
 import (
-	"log"
 	"time"
 
 	"github.com/Testzyler/order-management-go/infrastructure/http/api"
@@ -24,12 +23,12 @@ func InitHttpServer() {
 	// Config Port and Address
 	httpPort := viper.GetString("HttpServer.Port")
 	AppServer = fiber.New(fiber.Config{
-		Prefork: true,
-		ReadBufferSize:  1024 * 1024, // 1MB
-		WriteBufferSize: 1024 * 1024, // 1MB
-		ReadTimeout:     30 * time.Second,
-		WriteTimeout:    30 * time.Second,
-		IdleTimeout:     60 * time.Second,
+		DisableStartupMessage: true,        // Disable the startup banner
+		ReadBufferSize:        1024 * 1024, // 1MB
+		WriteBufferSize:       1024 * 1024, // 1MB
+		ReadTimeout:           30 * time.Second,
+		WriteTimeout:          30 * time.Second,
+		IdleTimeout:           60 * time.Second,
 	})
 
 	// Add middleware
@@ -54,15 +53,15 @@ func InitHttpServer() {
 	err := AppServer.Listen(":" + httpPort)
 	if err != nil {
 		httpLogger.Error("Failed to start HTTP server", "error", err)
-		log.Fatal(err)
+		logger.Fatalf("Failed to start HTTP server: %v", err)
 	}
 }
 
 func ShutdownHttpServer() {
-	log.Println("http server is shutting down")
+	logger.Info("http server is shutting down")
 	if err := AppServer.Shutdown(); err != nil {
-		log.Printf("http server shut down failed: %s", err)
+		logger.Errorf("http server shut down failed: %s", err)
 		return
 	}
-	log.Println("http server shut down completed")
+	logger.Info("http server shut down completed")
 }

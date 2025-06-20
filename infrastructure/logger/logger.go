@@ -2,9 +2,13 @@ package logger
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -13,11 +17,12 @@ type Logger struct {
 }
 
 type LoggerConfig struct {
-	Level      string `yaml:"level" mapstructure:"level"`
-	Format     string `yaml:"format" mapstructure:"format"` // "json" or "text"
-	AddSource  bool   `yaml:"add_source" mapstructure:"add_source"`
-	TimeFormat string `yaml:"time_format" mapstructure:"time_format"`
-	Output     string `yaml:"output" mapstructure:"output"` // "stdout", "stderr", or file path
+	Level       string `yaml:"level" mapstructure:"level"`
+	Format      string `yaml:"format" mapstructure:"format"` // "json" or "compact"
+	AddSource   bool   `yaml:"add_source" mapstructure:"add_source"`
+	TimeFormat  string `yaml:"time_format" mapstructure:"time_format"`
+	Output      string `yaml:"output" mapstructure:"output"`             // "stdout", "stderr", or file path
+	EnableColor bool   `yaml:"enable_color" mapstructure:"enable_color"` // Enable colored output
 }
 
 var (
@@ -46,6 +51,9 @@ func Initialize(config LoggerConfig) error {
 	switch config.Format {
 	case "json":
 		handler = slog.NewJSONHandler(output, opts)
+	case "compact":
+		// "compact" format uses the custom compact text handler
+		handler = NewCompactTextHandler(output, opts, config.EnableColor)
 	default:
 		handler = slog.NewTextHandler(output, opts)
 	}
@@ -103,6 +111,33 @@ func (l *Logger) WithError(err error) *Logger {
 	return l.WithField("error", err.Error())
 }
 
+// Formatted logging methods for Logger struct
+// Infof logs at Info level with printf-style formatting
+func (l *Logger) Infof(format string, args ...interface{}) {
+	l.Logger.Info(fmt.Sprintf(format, args...))
+}
+
+// Debugf logs at Debug level with printf-style formatting
+func (l *Logger) Debugf(format string, args ...interface{}) {
+	l.Logger.Debug(fmt.Sprintf(format, args...))
+}
+
+// Warnf logs at Warn level with printf-style formatting
+func (l *Logger) Warnf(format string, args ...interface{}) {
+	l.Logger.Warn(fmt.Sprintf(format, args...))
+}
+
+// Errorf logs at Error level with printf-style formatting
+func (l *Logger) Errorf(format string, args ...interface{}) {
+	l.Logger.Error(fmt.Sprintf(format, args...))
+}
+
+// Fatalf logs at Error level with printf-style formatting and exits
+func (l *Logger) Fatalf(format string, args ...interface{}) {
+	l.Logger.Error(fmt.Sprintf(format, args...))
+	os.Exit(1)
+}
+
 // Context operations
 // ToContext adds the logger to the context
 func (l *Logger) ToContext(ctx context.Context) context.Context {
@@ -137,6 +172,27 @@ func Error(msg string, args ...any) {
 func Fatal(msg string, args ...any) {
 	GetDefault().Error(msg, args...)
 	os.Exit(1)
+}
+
+// Formatted convenience functions for default logger
+func Infof(format string, args ...interface{}) {
+	GetDefault().Infof(format, args...)
+}
+
+func Debugf(format string, args ...interface{}) {
+	GetDefault().Debugf(format, args...)
+}
+
+func Warnf(format string, args ...interface{}) {
+	GetDefault().Warnf(format, args...)
+}
+
+func Errorf(format string, args ...interface{}) {
+	GetDefault().Errorf(format, args...)
+}
+
+func Fatalf(format string, args ...interface{}) {
+	GetDefault().Fatalf(format, args...)
 }
 
 // WithFields creates a new logger with additional fields from default logger
@@ -220,4 +276,127 @@ func LogServiceCall(logger *Logger, service, method string, duration time.Durati
 		"request_id":  requestID,
 		"type":        "service_call",
 	}).Debug("Service method called")
+}
+
+// ANSI color codes
+const (
+	ColorReset  = "\033[0m"
+	ColorGray   = "\033[90m" // Timestamp
+	ColorBlue   = "\033[34m" // Debug
+	ColorGreen  = "\033[32m" // Info
+	ColorYellow = "\033[33m" // Warn
+	ColorRed    = "\033[31m" // Error
+	ColorCyan   = "\033[36m" // Source
+)
+
+// CompactTextHandler is a custom slog handler that formats logs in a compact format
+// Format: 2025-06-20T21:26:54.635+0700    info    cmd/cmd.go:52   message
+type CompactTextHandler struct {
+	writer      io.Writer
+	opts        *slog.HandlerOptions
+	enableColor bool
+}
+
+func NewCompactTextHandler(w io.Writer, opts *slog.HandlerOptions, enableColor bool) *CompactTextHandler {
+	if opts == nil {
+		opts = &slog.HandlerOptions{}
+	}
+	return &CompactTextHandler{
+		writer:      w,
+		opts:        opts,
+		enableColor: enableColor,
+	}
+}
+
+func (h *CompactTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.opts.Level.Level()
+}
+
+func (h *CompactTextHandler) Handle(ctx context.Context, record slog.Record) error {
+	var buf strings.Builder
+
+	// Format: timestamp + level + source + message + attributes
+
+	// Timestamp with timezone (gray if colors enabled)
+	if h.enableColor {
+		buf.WriteString(ColorGray)
+	}
+	buf.WriteString(record.Time.Format("2006-01-02T15:04:05.000-0700"))
+	if h.enableColor {
+		buf.WriteString(ColorReset)
+	}
+	buf.WriteString("\t")
+
+	// Level (lowercase with color)
+	levelStr := strings.ToLower(record.Level.String())
+	if h.enableColor {
+		switch record.Level {
+		case slog.LevelDebug:
+			buf.WriteString(ColorBlue)
+		case slog.LevelInfo:
+			buf.WriteString(ColorGreen)
+		case slog.LevelWarn:
+			buf.WriteString(ColorYellow)
+		case slog.LevelError:
+			buf.WriteString(ColorRed)
+		}
+	}
+	buf.WriteString(levelStr)
+	if h.enableColor {
+		buf.WriteString(ColorReset)
+	}
+	buf.WriteString("\t")
+
+	// Source file and line (cyan if colors enabled)
+	if h.opts.AddSource && record.PC != 0 {
+		fs := runtime.CallersFrames([]uintptr{record.PC})
+		f, _ := fs.Next()
+		if f.File != "" {
+			// Extract just the filename, not the full path
+			filename := filepath.Base(f.File)
+			if h.enableColor {
+				buf.WriteString(ColorCyan)
+			}
+			buf.WriteString(fmt.Sprintf("%s:%d", filename, f.Line))
+			if h.enableColor {
+				buf.WriteString(ColorReset)
+			}
+		}
+	}
+	buf.WriteString("\t")
+
+	// Message (no color)
+	buf.WriteString(record.Message)
+
+	// Add attributes if any
+	record.Attrs(func(attr slog.Attr) bool {
+		buf.WriteString("\t")
+		if h.enableColor {
+			buf.WriteString(ColorCyan)
+		}
+		buf.WriteString(attr.Key)
+		if h.enableColor {
+			buf.WriteString(ColorReset)
+		}
+		buf.WriteString("=")
+		buf.WriteString(fmt.Sprintf("%v", attr.Value.Any()))
+		return true
+	})
+
+	buf.WriteString("\n")
+
+	_, err := h.writer.Write([]byte(buf.String()))
+	return err
+}
+
+func (h *CompactTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	// For simplicity, return the same handler
+	// In a full implementation, you'd create a new handler with additional attrs
+	return h
+}
+
+func (h *CompactTextHandler) WithGroup(name string) slog.Handler {
+	// For simplicity, return the same handler
+	// In a full implementation, you'd handle grouping
+	return h
 }

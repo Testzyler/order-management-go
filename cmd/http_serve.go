@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/Testzyler/order-management-go/infrastructure/logger"
 )
 
 func initListenOsSignal() {
@@ -24,7 +24,7 @@ func initListenOsSignal() {
 					count++
 					// Get Twice Signal Force Exit without Waiting Close all Components
 					if count == 2 {
-						log.Println("Forcefully exiting")
+						logger.Info("Forcefully exiting")
 						os.Exit(1)
 					}
 
@@ -36,8 +36,8 @@ func initListenOsSignal() {
 						shutdownHttpServer()
 					}()
 
-					log.Println("signal SIGKILL caught. shutting down")
-					log.Println("catching SIGKILL one more time will forcefully exit")
+					logger.Warn("signal SIGKILL caught. shutting down")
+					logger.Warn("catching SIGKILL one more time will forcefully exit")
 
 					wg.Done()
 				}

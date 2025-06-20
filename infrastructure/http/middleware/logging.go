@@ -32,10 +32,10 @@ func RequestIDMiddleware() fiber.Handler {
 func LoggingMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Now()
-		
+
 		// Get request ID from locals
 		requestID, _ := c.Locals("request_id").(string)
-		
+
 		// Create logger with request context
 		requestLogger := logger.GetDefault().WithFields(map[string]interface{}{
 			"request_id": requestID,
@@ -57,7 +57,7 @@ func LoggingMiddleware() fiber.Handler {
 		// Log request completion
 		duration := time.Since(start)
 		statusCode := c.Response().StatusCode()
-		
+
 		logger.LogHTTPRequest(requestLogger, c.Method(), c.Path(), statusCode, duration, requestID)
 
 		return err
@@ -71,7 +71,7 @@ func RecoveryMiddleware() fiber.Handler {
 			if err := recover(); err != nil {
 				requestLogger := GetLoggerFromFiberContext(c)
 				requestLogger.WithField("panic", err).Error("Panic recovered")
-				
+
 				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "Internal Server Error",
 				})

@@ -9,3 +9,9 @@ Database:
   Port: 5432
   DatabaseName: store
   DatabaseSchema: store
+
+Logger:
+  Format: json
+  Level: info
+  AddSource: true
+  Output: stdout # Docker can collect these logs

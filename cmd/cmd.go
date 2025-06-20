@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -32,7 +31,7 @@ var serveCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Initialize logger first
 		if err := initLogger(); err != nil {
-			log.Fatalf("Failed to initialize logger: %v", err)
+			logger.Fatalf("Failed to initialize logger: %v", err)
 		}
 
 		appLogger := logger.WithComponent("main")
@@ -63,7 +62,7 @@ var serveCmd = &cobra.Command{
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Println(err)
+		logger.Warnf("Error executing root command: %v", err)
 		os.Exit(1)
 	}
 }
@@ -81,15 +80,15 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		log.Printf("Using config file: %s\n", viper.ConfigFileUsed())
+		logger.Infof("Using config file: %s", viper.ConfigFileUsed())
 	} else {
-		log.Printf("Error reading config file: %v\n", err)
+		logger.Error("Error reading config file: %v", err)
 		os.Exit(1)
 	}
 
 	// Verify database configuration
 	if !viper.IsSet("Database.Username") || !viper.IsSet("Database.Password") {
-		log.Println("Database configuration is missing or incomplete")
+		logger.Warn("Database configuration is missing or incomplete")
 		os.Exit(1)
 	}
 }

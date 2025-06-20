@@ -55,7 +55,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 		"customer_name": order.CustomerName,
 		"total_amount":  order.TotalAmount,
 	}).Info("Order created successfully")
-	
+
 	return nil
 }
 
@@ -92,7 +92,7 @@ func (s *OrderService) UpdateOrder(ctx context.Context, order models.UpdateOrder
 		serviceLogger.WithError(err).Error("Failed to update order in repository", "order_id", order.ID)
 		return err
 	}
-	
+
 	serviceLogger.Info("Order updated successfully", "order_id", order.ID, "status", order.Status)
 	return nil
 }
