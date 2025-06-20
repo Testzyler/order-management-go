@@ -24,6 +24,8 @@ The goal is to build an Online Order Management System API that handles concurre
 | Transactions for Writes | ✅ **Done** | The repository layer correctly uses transactions. |
 | Context Propagation | ✅ **Done** | Context is passed down to the repository for timeout/cancellation handling. |
 
+Result :
+![Stress Test Result](Screenshot.png)
 ---
 
 ## Tech Stack
