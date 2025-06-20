@@ -138,7 +138,7 @@ func sendBulkOrderRequest(ctx context.Context, order models.CreateOrderInput, ap
 	payload, err := json.Marshal(order)
 	if err != nil {
 		return fmt.Errorf("failed to marshal orders: %w", err)
-	}
+}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(payload))
 	if err != nil {

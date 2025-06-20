@@ -60,6 +60,16 @@ func AddRoute() {
 			for routeName, routeFunc := range routes {
 				AppServer.Post(routeName, routeFunc)
 			}
+		} else if method == constants.METHOD_PUT {
+			for routeName, routeFunc := range routes {
+				AppServer.Put(routeName, routeFunc)
+			}
+		} else if method == constants.METHOD_DELETE {
+			for routeName, routeFunc := range routes {
+				AppServer.Delete(routeName, routeFunc)
+			}
+		} else {
+			log.Printf("unknown method %s", method)
 		}
 	}
 }

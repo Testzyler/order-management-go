@@ -180,13 +180,19 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) e
 	defer func() {
 		if err != nil {
 			tx.Rollback(ctx)
+			fmt.Printf("failed to rollback transaction: %v\n", err)
+			return
 		} else {
 			err = tx.Commit(ctx)
+			if err != nil {
+				fmt.Printf("failed to commit transaction: %v\n", err)
+				return
+			}
 		}
 	}()
 
 	query := "UPDATE orders SET customer_name = $1, total_amount = $2, status = $3, updated_at = $4 WHERE id = $5"
-	_, err = tx.Query(ctx, query, order.CustomerName, order.TotalAmount, order.Status, time.Now(), order.ID)
+	_, err = tx.Exec(ctx, query, order.CustomerName, order.TotalAmount, order.Status, time.Now(), order.ID)
 	if err != nil {
 		return err
 	}
@@ -208,8 +214,8 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 		}
 	}()
 
-	query := "DELETE FROM orders WHERE id = ?"
-	_, err = tx.Query(ctx, query, id)
+	query := "DELETE FROM orders WHERE id = $1"
+	_, err = tx.Exec(ctx, query, id)
 	if err != nil {
 		return err
 	}

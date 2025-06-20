@@ -31,6 +31,8 @@ func AddRoute(router *fiber.Router) {
 				routerWithPrefix.Post(route.Path, route.HandlerFunc)
 			} else if route.Method == constants.METHOD_DELETE {
 				routerWithPrefix.Delete(route.Path, route.HandlerFunc)
+			} else if route.Method == constants.METHOD_PUT {
+				routerWithPrefix.Put(route.Path, route.HandlerFunc)
 			}
 		}
 	}

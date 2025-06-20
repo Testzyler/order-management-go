@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,7 +12,6 @@ import (
 )
 
 var DatabasePool *pgxpool.Pool
-var ctx = context.Background()
 var DBConfig = struct {
 	Username       string
 	Password       string
@@ -45,14 +45,16 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 		userName, password, host, port, databaseName, databaseSchema,
 	)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	db, err := pgxpool.New(ctx, connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Test the connection
-	if err := db.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	if err := waitForDatabase(db, 30*time.Second); err != nil {
+		log.Fatalf("DB connection failed: %v", err)
 	}
 
 	db.Config().MaxConns = 500
@@ -83,4 +85,27 @@ func ShutdownDatabase() error {
 		fmt.Println("Database connection closed successfully.")
 	}
 	return nil
+}
+
+func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
+	log.Println("Waiting for database to be ready...")
+
+	deadline := time.Now().Add(timeout)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := pool.Ping(ctx)
+		cancel()
+
+		if err == nil {
+			log.Println("Database is ready!")
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("database not ready after %s: %w", timeout, err)
+		}
+
+		log.Println("Database not ready, retrying in 1s...")
+		time.Sleep(1 * time.Second)
+	}
 }

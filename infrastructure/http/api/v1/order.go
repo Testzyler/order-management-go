@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/Testzyler/order-management-go/application/constants"
@@ -11,6 +12,7 @@ import (
 	"github.com/Testzyler/order-management-go/application/services"
 	"github.com/Testzyler/order-management-go/infrastructure/database"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 )
 
 type OrderHandler struct {
@@ -116,6 +118,12 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 
 	order, err := h.service.GetOrderById(ctx, idInt)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return c.Status(fiber.ErrNotFound.Code).JSON(fiber.Map{
+				"message": "Order not found",
+			})
+		}
+		// Handle other errors
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
 			"message": err.Error(),
 		})
@@ -176,7 +184,9 @@ func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.Status(fiber.StatusNoContent).SendString("")
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"message": "Order deleted successfully",
+	})
 }
 
 func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
@@ -202,6 +212,12 @@ func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
 		Size: sizeInt,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return c.Status(fiber.ErrNotFound.Code).JSON(fiber.Map{
+				"message": "Order not found",
+			})
+		}
+
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
 			"message": err.Error(),
 		})
