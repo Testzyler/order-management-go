@@ -34,7 +34,7 @@ func InitHttpServer() {
 	// Add middleware
 	AppServer.Use(middleware.RecoveryMiddleware())
 	AppServer.Use(middleware.RequestIDMiddleware())
-	AppServer.Use(middleware.LoggingMiddleware())
+	// AppServer.Use(middleware.LoggingMiddleware())
 
 	// Add Api Path (includes health check now)
 	apiGroup := AppServer.Group("/api")

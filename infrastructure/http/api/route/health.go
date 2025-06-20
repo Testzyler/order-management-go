@@ -32,6 +32,10 @@ func (h *HealthHandler) GetRouteDefinition() RouteDefinition {
 	}
 }
 
+func init() {
+	RegisterHandler(NewHealthHandler())
+}
+
 func (h *HealthHandler) HealthCheck(c *fiber.Ctx) error {
 	// Get logger with request ID from context
 	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("health-handler")
@@ -45,9 +49,4 @@ func (h *HealthHandler) HealthCheck(c *fiber.Ctx) error {
 
 	requestLogger.Info("Health check completed successfully")
 	return c.JSON(response)
-}
-
-// Auto-register the health handler
-func init() {
-	RegisterHandler(NewHealthHandler())
 }

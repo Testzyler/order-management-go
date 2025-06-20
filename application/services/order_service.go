@@ -23,10 +23,6 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
 	// Use logger with request ID from context
 	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-	serviceLogger.Info("Service: CreateOrder started",
-		"customer_name", input.CustomerName,
-		"item_count", len(input.Items),
-	)
 
 	// Validate input
 	serviceLogger.Debug("Service: Validating order input")
@@ -51,20 +47,12 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	serviceLogger.Debug("Service: Processing order items", "item_count", len(input.Items))
 	for i, v := range input.Items {
 		if v.Quantity <= 0 {
-			serviceLogger.Error("Service: Invalid item quantity",
-				"item_index", i,
-				"product_name", v.ProductName,
-				"quantity", v.Quantity,
-			)
+			serviceLogger.Errorf("Service: Invalid item quantity: %d", v.Quantity)
 			return errors.New("item quantity must be greater than 0")
 		}
 
 		if v.Price < 0 {
-			serviceLogger.Error("Service: Invalid item price",
-				"item_index", i,
-				"product_name", v.ProductName,
-				"price", v.Price,
-			)
+			serviceLogger.Errorf("Service: Invalid item price: %d", v.Price)
 			return errors.New("item price cannot be negative")
 		}
 
@@ -75,30 +63,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 		}
 		itemTotal := v.Price * float64(v.Quantity)
 		totalAmount += itemTotal
-
-		serviceLogger.Debug("Service: Processed item",
-			"item_index", i,
-			"product_name", v.ProductName,
-			"quantity", v.Quantity,
-			"price", v.Price,
-			"item_total", itemTotal,
-		)
 	}
 
 	order.TotalAmount = totalAmount
-
-	serviceLogger.WithFields(map[string]interface{}{
-		"total_amount": order.TotalAmount,
-		"item_count":   len(items),
-		"status":       order.Status,
-	}).Info("Service: Order totals calculated")
-
-	// Call repository layer - context cancellation handled by pgx
-	serviceLogger.Debug("Service: Calling repository layer to create order")
 	start := time.Now()
-
 	err := s.repo.CreateOrder(ctx, order, items)
-
 	duration := time.Since(start)
 	logger.LogServiceCall(serviceLogger, "OrderRepository", "CreateOrder", duration, logger.RequestIDFromContext(ctx))
 
