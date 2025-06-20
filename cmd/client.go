@@ -28,7 +28,7 @@ var (
 	batchSizeFlag   int
 	concurrencyFlag int
 	apiURLFlag      string
-	totalTimeout    = 30 * time.Second
+	totalTimeout    = 60 * time.Second
 )
 
 func init() {

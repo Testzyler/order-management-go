@@ -197,7 +197,7 @@ func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
 		})
 	}
 
-	orders, err := h.service.ListOrders(ctx, models.ListOrdersInput{
+	orders, err := h.service.ListOrders(ctx, models.ListInput{
 		Page: pageInt,
 		Size: sizeInt,
 	})

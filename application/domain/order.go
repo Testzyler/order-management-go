@@ -11,7 +11,7 @@ type OrderService interface {
 	GetOrderById(ctx context.Context, id int) (models.Order, error)
 	UpdateOrder(ctx context.Context, order models.UpdateOrderInput) error
 	DeleteOrder(ctx context.Context, id int) error
-	ListOrders(ctx context.Context, input models.ListOrdersInput) (models.ListPaginatedOrders, error)
+	ListOrders(ctx context.Context, input models.ListInput) (models.ListPaginatedOrders, error)
 }
 
 type OrderRepository interface {
@@ -19,5 +19,5 @@ type OrderRepository interface {
 	GetOrderById(ctx context.Context, id int) (models.Order, error)
 	UpdateOrder(ctx context.Context, order models.Order) error
 	DeleteOrder(ctx context.Context, id int) error
-	ListOrders(ctx context.Context, input models.ListOrdersInput) (*models.ListPaginatedOrders, error)
+	ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error)
 }

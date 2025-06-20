@@ -1,15 +1,17 @@
 package database
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 )
 
-var DatabasePool *sql.DB
+var DatabasePool *pgxpool.Pool
+var ctx = context.Background()
 var DBConfig = struct {
 	Username       string
 	Password       string
@@ -26,7 +28,7 @@ var DBConfig = struct {
 	DatabaseSchema: viper.GetString("Database.DatabaseSchema"),
 }
 
-func InitializeDatabase() (*sql.DB, error) {
+func InitializeDatabase() (*pgxpool.Pool, error) {
 	// Ensure configuration is loaded
 	userName := viper.GetString("Database.Username")
 	password := viper.GetString("Database.Password")
@@ -43,27 +45,24 @@ func InitializeDatabase() (*sql.DB, error) {
 		userName, password, host, port, databaseName, databaseSchema,
 	)
 
-	db, err := sql.Open("postgres", connStr)
+	db, err := pgxpool.New(ctx, connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Test the connection
-	err = db.Ping()
-	if err != nil {
+	if err := db.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	db.SetMaxOpenConns(100)
-	db.SetMaxIdleConns(100)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(time.Duration(180) * time.Second)
+	db.Config().MaxConns = 200
+	db.Config().MaxConnLifetime = 5 * time.Minute
 
 	fmt.Println("Database connection established successfully.")
 	return db, nil
 }
 
-func NewDatabaseConnection() (*sql.DB, error) {
+func NewDatabaseConnection() (*pgxpool.Pool, error) {
 	if DatabasePool == nil {
 		db, err := InitializeDatabase()
 		if err != nil {
@@ -79,13 +78,8 @@ func NewDatabaseConnection() (*sql.DB, error) {
 
 func ShutdownDatabase() error {
 	if DatabasePool != nil {
-		if err := DatabasePool.Close(); err != nil {
-			fmt.Printf("Error closing database connection: %v\n", err)
-			return err
-		} else {
-			fmt.Println("Database connection closed successfully.")
-			return nil
-		}
+		DatabasePool.Close()
+		fmt.Println("Database connection closed successfully.")
 	}
 	return nil
 }

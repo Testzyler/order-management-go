@@ -24,7 +24,6 @@ type Order struct {
 
 type CreateOrderInput struct {
 	CustomerName string      `json:"customer_name"`
-	TotalAmount  float64     `json:"total_amount"`
 	Status       Status      `json:"status"`
 	Items        []OrderItem `json:"items"`
 }
@@ -36,19 +35,6 @@ type UpdateOrderInput struct {
 	Status       Status  `json:"status"`
 }
 
-type ListOrdersInput struct {
-	Page int `json:"page"`
-	Size int `json:"size"`
-}
-
-type ListPaginatedOrders struct {
-	Data       []Order `json:"data"`
-	Total      int     `json:"total"`
-	Page       int     `json:"page"`
-	Size       int     `json:"size"`
-	TotalPages int     `json:"total_pages"`
-}
-
 type OrderItem struct {
 	ID          int       `json:"id,omitempty"`
 	OrderID     int       `json:"order_id"`
@@ -58,3 +44,10 @@ type OrderItem struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
+
+type OrderWithItems struct {
+	Order
+	Items []OrderItem `json:"items"`
+}
+
+type ListPaginatedOrders = ListPaginated[OrderWithItems]
