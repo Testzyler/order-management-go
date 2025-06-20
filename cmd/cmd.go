@@ -30,5 +30,5 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "./config/config.yaml", "config file")
-	// rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(ServeCmd)
 }

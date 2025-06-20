@@ -12,7 +12,7 @@ Database:
 
 Logger:
   Format: compact
-  Level: debug        # More verbose for development
+  Level: info        # More verbose for development
   AddSource: true
   Output: stdout      # Output to console for development
   EnableColor: true   # Enable colored output for compact format

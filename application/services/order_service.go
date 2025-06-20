@@ -23,7 +23,22 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
 	// Use logger with request ID from context
 	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-	serviceLogger.Info("Creating new order", "customer_name", input.CustomerName)
+	serviceLogger.Info("Service: CreateOrder started",
+		"customer_name", input.CustomerName,
+		"item_count", len(input.Items),
+	)
+
+	// Validate input
+	serviceLogger.Debug("Service: Validating order input")
+	if input.CustomerName == "" {
+		serviceLogger.Error("Service: Customer name is required")
+		return errors.New("customer name is required")
+	}
+
+	if len(input.Items) == 0 {
+		serviceLogger.Error("Service: Order must have at least one item")
+		return errors.New("order must have at least one item")
+	}
 
 	order := models.Order{
 		CustomerName: input.CustomerName,
@@ -31,46 +46,174 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	}
 
 	items := make([]models.OrderItem, len(input.Items))
+	totalAmount := 0.0
+
+	serviceLogger.Debug("Service: Processing order items", "item_count", len(input.Items))
 	for i, v := range input.Items {
+		if v.Quantity <= 0 {
+			serviceLogger.Error("Service: Invalid item quantity",
+				"item_index", i,
+				"product_name", v.ProductName,
+				"quantity", v.Quantity,
+			)
+			return errors.New("item quantity must be greater than 0")
+		}
+
+		if v.Price < 0 {
+			serviceLogger.Error("Service: Invalid item price",
+				"item_index", i,
+				"product_name", v.ProductName,
+				"price", v.Price,
+			)
+			return errors.New("item price cannot be negative")
+		}
+
 		items[i] = models.OrderItem{
 			ProductName: v.ProductName,
 			Quantity:    v.Quantity,
 			Price:       v.Price,
 		}
-		order.TotalAmount += v.Price * float64(v.Quantity)
+		itemTotal := v.Price * float64(v.Quantity)
+		totalAmount += itemTotal
+
+		serviceLogger.Debug("Service: Processed item",
+			"item_index", i,
+			"product_name", v.ProductName,
+			"quantity", v.Quantity,
+			"price", v.Price,
+			"item_total", itemTotal,
+		)
 	}
+
+	order.TotalAmount = totalAmount
 
 	serviceLogger.WithFields(map[string]interface{}{
 		"total_amount": order.TotalAmount,
 		"item_count":   len(items),
-	}).Debug("Calculated order totals")
+		"status":       order.Status,
+	}).Info("Service: Order totals calculated")
+
+	// Call repository layer - context cancellation handled by pgx
+	serviceLogger.Debug("Service: Calling repository layer to create order")
+	start := time.Now()
 
 	err := s.repo.CreateOrder(ctx, order, items)
+
+	duration := time.Since(start)
+	logger.LogServiceCall(serviceLogger, "OrderRepository", "CreateOrder", duration, logger.RequestIDFromContext(ctx))
+
 	if err != nil {
-		serviceLogger.WithError(err).Error("Failed to create order in repository")
+		// Check if error is due to context cancellation
+		if errors.Is(err, context.Canceled) {
+			serviceLogger.Warn("Service: Repository call cancelled by client",
+				"repository_duration_ms", duration.Milliseconds(),
+				"customer_name", input.CustomerName,
+			)
+			return err
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			serviceLogger.Warn("Service: Repository call timed out",
+				"repository_duration_ms", duration.Milliseconds(),
+				"customer_name", input.CustomerName,
+			)
+			return err
+		}
+
+		serviceLogger.WithError(err).Error("Service: Repository layer failed to create order",
+			"repository_duration_ms", duration.Milliseconds(),
+			"customer_name", input.CustomerName,
+			"total_amount", order.TotalAmount,
+		)
 		return err
 	}
 
-	serviceLogger.Info("Order created successfully in service layer")
+	serviceLogger.Info("Service: Order created successfully in repository",
+		"repository_duration_ms", duration.Milliseconds(),
+		"customer_name", input.CustomerName,
+		"total_amount", order.TotalAmount,
+	)
 	return nil
 }
 
 func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
 	// Use logger with request ID from context
 	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-	serviceLogger.Debug("Retrieving order by ID", "order_id", id)
+	serviceLogger.Info("Service: GetOrderById started", "order_id", id)
+
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		serviceLogger.Warn("Service: Request cancelled before processing", "order_id", id, "error", ctx.Err())
+		return models.OrderWithItems{}, ctx.Err()
+	default:
+		// Continue with operation
+	}
+
+	// Validate input
+	if id <= 0 {
+		serviceLogger.Error("Service: Invalid order ID", "order_id", id)
+		return models.OrderWithItems{}, errors.New("order ID must be greater than 0")
+	}
+
+	// Check for cancellation before calling repository
+	select {
+	case <-ctx.Done():
+		serviceLogger.Warn("Service: Request cancelled before repository call", "order_id", id, "error", ctx.Err())
+		return models.OrderWithItems{}, ctx.Err()
+	default:
+		// Continue with operation
+	}
+
+	serviceLogger.Debug("Service: Calling repository layer to get order", "order_id", id)
+	start := time.Now()
 
 	order, err := s.repo.GetOrderById(ctx, id)
+
+	duration := time.Since(start)
+	logger.LogServiceCall(serviceLogger, "OrderRepository", "GetOrderById", duration, logger.RequestIDFromContext(ctx))
+
 	if err != nil {
-		serviceLogger.WithError(err).Error("Failed to retrieve order from repository", "order_id", id)
+		// Check if error is due to context cancellation
+		if errors.Is(err, context.Canceled) {
+			serviceLogger.Warn("Service: Repository call cancelled by client",
+				"order_id", id,
+				"repository_duration_ms", duration.Milliseconds(),
+				"error", err,
+			)
+			return models.OrderWithItems{}, err
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			serviceLogger.Warn("Service: Repository call timed out",
+				"order_id", id,
+				"repository_duration_ms", duration.Milliseconds(),
+				"error", err,
+			)
+			return models.OrderWithItems{}, err
+		}
+
+		serviceLogger.WithError(err).Error("Service: Repository layer failed to retrieve order",
+			"order_id", id,
+			"repository_duration_ms", duration.Milliseconds(),
+		)
 		return models.OrderWithItems{}, err
 	}
+
 	if order.ID == 0 {
-		serviceLogger.Warn("Order not found", "order_id", id)
+		serviceLogger.Warn("Service: Order not found in repository",
+			"order_id", id,
+			"repository_duration_ms", duration.Milliseconds(),
+		)
 		return models.OrderWithItems{}, errors.New("order not found")
 	}
 
-	serviceLogger.Info("Order retrieved successfully", "order_id", id)
+	serviceLogger.Info("Service: Order retrieved successfully from repository",
+		"order_id", id,
+		"customer_name", order.CustomerName,
+		"status", order.Status,
+		"total_amount", order.TotalAmount,
+		"item_count", len(order.Items),
+		"repository_duration_ms", duration.Milliseconds(),
+	)
 	return order, nil
 }
 

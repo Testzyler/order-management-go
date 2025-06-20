@@ -1,8 +1,10 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/Testzyler/order-management-go/application/constants"
 	"github.com/Testzyler/order-management-go/application/domain"
@@ -75,18 +77,51 @@ func init() {
 }
 
 func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
-	// Get logger with request ID from context (automatically includes request_id)
+	// Get logger with request ID from context and enhanced metadata
 	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("order-handler")
-	requestLogger.Info("Creating new order")
+	requestLogger.Info("Handler: CreateOrder started",
+		"endpoint", "POST /orders",
+		"content_type", c.Get("Content-Type"),
+	)
 
 	var input models.CreateOrderInput
 	// Use the context that already has request ID
 	ctx := c.Context()
 
+	// Check if request is already cancelled
+	select {
+	case <-ctx.Done():
+		requestLogger.Warn("Handler: Request cancelled before processing", "error", ctx.Err())
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+				"message":    "Request was cancelled by client",
+				"request_id": logger.RequestIDFromContext(ctx),
+			})
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+				"message":    "Request timed out",
+				"request_id": logger.RequestIDFromContext(ctx),
+			})
+		}
+		return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+			"message":    "Request cancelled",
+			"request_id": logger.RequestIDFromContext(ctx),
+		})
+	default:
+		// Continue processing
+	}
+
+	// Log body parsing attempt
+	requestLogger.Debug("Handler: Parsing request body")
 	if err := c.BodyParser(&input); err != nil {
-		requestLogger.WithError(err).Error("Failed to parse request body")
+		requestLogger.WithError(err).Error("Handler: Failed to parse request body",
+			"body_size", len(c.Body()),
+			"content_type", c.Get("Content-Type"),
+		)
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message": err.Error(),
+			"message":    err.Error(),
+			"request_id": logger.RequestIDFromContext(ctx),
 		})
 	}
 
@@ -94,19 +129,55 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 		"customer_name": input.CustomerName,
 		"item_count":    len(input.Items),
 		"status":        input.Status,
-	}).Debug("Parsed order input")
+	}).Info("Handler: Successfully parsed order input")
+
+	// Log service call start
+	requestLogger.Debug("Handler: Calling service layer to create order")
+	start := time.Now()
 
 	err := h.service.CreateOrder(ctx, input)
+
+	duration := time.Since(start)
+	logger.LogServiceCall(requestLogger, "OrderService", "CreateOrder", duration, logger.RequestIDFromContext(ctx))
+
 	if err != nil {
-		requestLogger.WithError(err).Error("Failed to create order")
+		// Check if error is due to context cancellation
+		if errors.Is(err, context.Canceled) {
+			requestLogger.Warn("Handler: Service call cancelled by client",
+				"service_duration_ms", duration.Milliseconds(),
+				"error", err,
+			)
+			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+				"message":    "Request was cancelled by client",
+				"request_id": logger.RequestIDFromContext(ctx),
+			})
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			requestLogger.Warn("Handler: Service call timed out",
+				"service_duration_ms", duration.Milliseconds(),
+				"error", err,
+			)
+			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+				"message":    "Request timed out",
+				"request_id": logger.RequestIDFromContext(ctx),
+			})
+		}
+
+		requestLogger.WithError(err).Error("Handler: Service layer failed to create order",
+			"service_duration_ms", duration.Milliseconds(),
+		)
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-			"message": err.Error(),
+			"message":    err.Error(),
+			"request_id": logger.RequestIDFromContext(ctx),
 		})
 	}
 
-	requestLogger.Info("Order created successfully")
+	requestLogger.Info("Handler: Order created successfully",
+		"service_duration_ms", duration.Milliseconds(),
+	)
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message": "Order created successfully",
+		"message":    "Order created successfully",
+		"request_id": logger.RequestIDFromContext(ctx),
 	})
 }
 
@@ -117,40 +188,119 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 	ctx := c.Context()
 	id := c.Params("id")
 
-	requestLogger.Debug("Getting order by ID", "order_id", id)
+	requestLogger.Info("Handler: GetOrder started",
+		"endpoint", "GET /orders/:id",
+		"order_id", id,
+	)
+
+	// Check if request is already cancelled
+	select {
+	case <-ctx.Done():
+		requestLogger.Warn("Handler: Request cancelled before processing", "order_id", id, "error", ctx.Err())
+		return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+			"message":    "Request cancelled",
+			"request_id": logger.RequestIDFromContext(ctx),
+		})
+	default:
+		// Continue processing
+	}
 
 	if id == "" {
-		requestLogger.Error("Order ID is required")
+		requestLogger.Error("Handler: Order ID is required but not provided")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message": "Order ID is required",
+			"message":    "Order ID is required",
+			"request_id": logger.RequestIDFromContext(ctx),
 		})
 	}
 
+	requestLogger.Debug("Handler: Validating order ID format", "provided_id", id)
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
-		requestLogger.WithError(err).Error("Invalid Order ID format", "provided_id", id)
+		requestLogger.WithError(err).Error("Handler: Invalid Order ID format",
+			"provided_id", id,
+			"expected_format", "integer",
+		)
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-			"message": "Invalid Order ID",
+			"message":    "Invalid Order ID format",
+			"request_id": logger.RequestIDFromContext(ctx),
 		})
 	}
+
+	// Check for cancellation before service call
+	select {
+	case <-ctx.Done():
+		requestLogger.Warn("Handler: Request cancelled before service call", "order_id", idInt, "error", ctx.Err())
+		return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+			"message":    "Request cancelled during processing",
+			"request_id": logger.RequestIDFromContext(ctx),
+		})
+	default:
+		// Continue processing
+	}
+
+	requestLogger.Debug("Handler: Calling service layer to get order", "order_id", idInt)
+	start := time.Now()
 
 	order, err := h.service.GetOrderById(ctx, idInt)
+
+	duration := time.Since(start)
+	logger.LogServiceCall(requestLogger, "OrderService", "GetByID", duration, logger.RequestIDFromContext(ctx))
+
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			requestLogger.Warn("Order not found", "order_id", idInt)
-			return c.Status(fiber.ErrNotFound.Code).JSON(fiber.Map{
-				"message": "Order not found",
+		// Check if error is due to context cancellation
+		if errors.Is(err, context.Canceled) {
+			requestLogger.Warn("Handler: Service call cancelled by client",
+				"order_id", idInt,
+				"service_duration_ms", duration.Milliseconds(),
+				"error", err,
+			)
+			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+				"message":    "Request was cancelled by client",
+				"request_id": logger.RequestIDFromContext(ctx),
 			})
 		}
-		// Handle other errors
-		requestLogger.WithError(err).Error("Failed to get order", "order_id", idInt)
+		if errors.Is(err, context.DeadlineExceeded) {
+			requestLogger.Warn("Handler: Service call timed out",
+				"order_id", idInt,
+				"service_duration_ms", duration.Milliseconds(),
+				"error", err,
+			)
+			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
+				"message":    "Request timed out",
+				"request_id": logger.RequestIDFromContext(ctx),
+			})
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			requestLogger.WithError(err).Warn("Handler: Order not found",
+				"order_id", idInt,
+				"service_duration_ms", duration.Milliseconds(),
+			)
+			return c.Status(fiber.ErrNotFound.Code).JSON(fiber.Map{
+				"message":    "Order not found",
+				"request_id": logger.RequestIDFromContext(ctx),
+			})
+		}
+		requestLogger.WithError(err).Error("Handler: Service layer failed to get order",
+			"order_id", idInt,
+			"service_duration_ms", duration.Milliseconds(),
+		)
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
-			"message": err.Error(),
+			"message":    err.Error(),
+			"request_id": logger.RequestIDFromContext(ctx),
 		})
 	}
 
-	requestLogger.Info("Order retrieved successfully", "order_id", idInt)
-	return c.JSON(order)
+	requestLogger.Info("Handler: Order retrieved successfully",
+		"order_id", idInt,
+		"customer_name", order.CustomerName,
+		"status", order.Status,
+		"service_duration_ms", duration.Milliseconds(),
+	)
+
+	return c.JSON(fiber.Map{
+		"data":       order,
+		"request_id": logger.RequestIDFromContext(ctx),
+	})
 }
 
 func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {

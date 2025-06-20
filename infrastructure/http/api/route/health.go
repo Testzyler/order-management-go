@@ -2,6 +2,7 @@ package route
 
 import (
 	"github.com/Testzyler/order-management-go/application/constants"
+	"github.com/Testzyler/order-management-go/infrastructure/logger"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -32,10 +33,18 @@ func (h *HealthHandler) GetRouteDefinition() RouteDefinition {
 }
 
 func (h *HealthHandler) HealthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
+	// Get logger with request ID from context
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("health-handler")
+
+	requestLogger.Debug("Health check requested")
+
+	response := fiber.Map{
 		"status":  "OK",
 		"message": "Service is healthy",
-	})
+	}
+
+	requestLogger.Info("Health check completed successfully")
+	return c.JSON(response)
 }
 
 // Auto-register the health handler
