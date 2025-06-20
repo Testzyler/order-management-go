@@ -2,16 +2,29 @@
 
 This is a sample order management service built with Go. It provides a RESTful API for creating, reading, updating, and deleting orders. The project is structured following Clean Architecture principles to ensure separation of concerns, maintainability, and testability.
 
-## Features
+## Project Requirements
 
-- **CRUD Operations:** Full support for creating, reading, updating, and deleting orders.
-- **RESTful API:** A well-defined API built with the [Fiber](https://gofiber.io/) web framework.
-- **Configuration Management:** Flexible configuration using [Viper](https://github.com/spf13/viper), supporting both file and environment variables.
-- **Database Integration:** Uses PostgreSQL as the database, with `sqlx` for easier database interactions.
-- **Command-Line Interface:** Powered by [Cobra](https://github.com/spf13/cobra) for a robust CLI experience.
-- **Graceful Shutdown:** Handles termination signals to shut down the server gracefully.
-- **Context Propagation:** Manages request context for timeouts and cancellations.
-- **Containerized:** Includes a `docker-compose.yaml` for easy setup of the PostgreSQL database.
+The goal is to build an Online Order Management System API that handles concurrent order processing using goroutines and ensures data integrity with PostgreSQL transactions.
+
+### Core Features Checklist
+
+| Requirement | Status | Notes |
+| :--- | :--- | :--- |
+| **Database Structure** | | |
+| `orders` table | ✅ **Done** | The current structure is functional. |
+| `order_items` table | ✅ **Done** | The current structure is functional. |
+| **API Endpoints** | | |
+| `POST /orders` (with items) | ✅ **Done**  | Currently creates an order, but needs logic to handle order items within the same transaction. |
+| `GET /orders/{order_id}` |  ✅ **Done** | Needs to be updated to fetch associated order items. |
+| `GET /orders` (paginated) | ✅ **Done** | Pagination is implemented. |
+| `PUT /orders/{order_id}/status` | ✅ **Done** | This specific endpoint for status updates needs to be created. |
+| **Technical Requirements** | | |
+| Go Postgres Driver | ✅ **Done** | Using `github.com/jackc/pgx`. |
+| Goroutines for Concurrency | ✅ **Done** | A `stress-test` command is available. |
+| Transactions for Writes | ✅ **Done** | The repository layer correctly uses transactions. |
+| Context Propagation | ✅ **Done** | Context is passed down to the repository for timeout/cancellation handling. |
+
+---
 
 ## Tech Stack
 
@@ -45,8 +58,6 @@ Copy the example configuration file and update it with your database credentials
 cp config/config.example.yaml config/config.yaml
 ```
 
-The default configuration (`config/config.yaml`) is set up to work with the provided Docker Compose setup.
-
 ### 3. Start the Database
 
 Run the PostgreSQL database in a Docker container using Docker Compose.
@@ -55,11 +66,9 @@ Run the PostgreSQL database in a Docker container using Docker Compose.
 docker-compose up -d
 ```
 
-This will start a PostgreSQL server on `localhost:5432`.
-
 ### 4. Initialize the Database
 
-Run the `init.sql` script to create the necessary tables and schema.
+Run the `init.sql` script to create the necessary tables. **Note: You will need to add the `order_items` table to this file.**
 
 ```bash
 psql -h localhost -p 5432 -U dborder -d store -f init.sql
@@ -68,53 +77,25 @@ psql -h localhost -p 5432 -U dborder -d store -f init.sql
 
 ### 5. Run the Application
 
-Start the HTTP server using the following command:
-
 ```bash
 go run . http-serve
 ```
 
-The server will start on `http://localhost:3333`.
-
 ## API Endpoints
 
-The following endpoints are available under the `/orders` prefix:
-
-| Method | Path              | Description                               |
-|--------|-------------------|-------------------------------------------|
-| `POST` | `/`               | Create a new order.                       |
-| `GET`    | `/`               | List all orders with pagination.          |
-| `GET`    | `/:id`            | Get a single order by its ID.             |
-| `PUT`    | `/:id`            | Update an existing order.                 |
-| `DELETE` | `/:id`            | Delete an order by its ID.                |
-
-### Example Usage (cURL)
-
-**List Orders (with pagination):**
-```bash
-curl "http://localhost:3333/orders?page=1&size=5"
-```
-
-**Create an Order:**
-```bash
-curl -X POST http://localhost:3333/orders \
--H "Content-Type: application/json" \
--d '{"customer_name": "John Doe", "total_amount": 199.99, "status": "pending"}'
-```
-
-**Get an Order:**
-```bash
-curl http://localhost:3333/orders/1
-```
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `POST` | `/orders` | Create a new order (with items). |
+| `GET` | `/orders` | List all orders (paginated). |
+| `GET` | `/orders/{order_id}` | Get a single order by its ID. |
+| `PUT` | `/orders/{order_id}/status` | Update an order's status. |
 
 ## Stress Testing
 
-This project includes a command to run a stress test against the `CreateOrder` endpoint. This helps in evaluating the performance and stability of the service under a high load.
-
-To run the stress test, use the following command:
+This project includes a command to run a stress test against the `CreateOrder` endpoint.
 
 ```bash
-go run . stress-test --num 17000 --batch 3 --concurrency 50
+go run . stress-test --num 1000 --batch 1 --concurrency 50
 ```
 
 ### Flags
@@ -125,13 +106,11 @@ go run . stress-test --num 17000 --batch 3 --concurrency 50
 
 ## Project Structure
 
-The project follows a Clean Architecture-like structure:
-
-- `application/`: Contains the core business logic, including domain models, services (use cases), and repository interfaces.
-- `cmd/`: Contains the command-line interface logic using Cobra. This is the entry point of the application.
+- `application/`: Core business logic (domain, services, repositories).
+- `cmd/`: CLI commands (Cobra).
 - `config/`: Configuration files.
-- `infrastructure/`: Contains implementations of external concerns like the database, HTTP server, and other third-party integrations.
-- `main.go`: The main function that executes the root command.
-- `init.sql`: SQL script for database schema initialization.
-- `docker-compose.yaml`: Defines the services for the development environment (e.g., database).
+- `infrastructure/`: External concerns (database, HTTP server).
+- `main.go`: Main application entry point.
+- `init.sql`: Database schema initialization.
+- `docker-compose.yaml`: Docker Compose services.
 

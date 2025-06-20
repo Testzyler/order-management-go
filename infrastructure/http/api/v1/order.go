@@ -51,7 +51,7 @@ func InitializeOrderHandler() {
 		},
 		Route{
 			Name:        "UpdateOrder",
-			Path:        "/:id",
+			Path:        "/:id/status",
 			Method:      constants.METHOD_PUT,
 			HandlerFunc: orderHandler.UpdateOrder,
 		},
@@ -149,7 +149,14 @@ func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	err := h.service.UpdateOrder(ctx, input)
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
+			"message": "Invalid Order ID",
+		})
+	}
+	input.ID = idInt
+	err = h.service.UpdateOrder(ctx, input)
 	if err != nil {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
 			"message": err.Error(),

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Testzyler/order-management-go/application/models"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -103,10 +104,11 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 	}, nil
 }
 
-func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Order, error) {
+func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
 	if err := ctx.Err(); err != nil {
-		return models.Order{}, err
+		return models.OrderWithItems{}, err
 	}
+	var result models.OrderWithItems
 	var order models.Order
 	query := `
 		SELECT id, customer_name, total_amount, status, created_at, updated_at 
@@ -123,101 +125,112 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return models.Order{}, nil
+			return models.OrderWithItems{}, nil
 		}
-		return models.Order{}, err
+		return models.OrderWithItems{}, err
 	}
-	return order, nil
+	// Fetch order items
+	itemQuery := `	SELECT id, order_id, product_name, quantity, price, created_at, updated_at
+		FROM order_items
+		WHERE order_id = $1`
+	itemRows, err := r.db.Query(ctx, itemQuery, id)
+	if err != nil {
+		return models.OrderWithItems{}, fmt.Errorf("failed to fetch order items: %w", err)
+	}
+	defer itemRows.Close()
+	var items []models.OrderItem
+	for itemRows.Next() {
+		var item models.OrderItem
+		if err := itemRows.Scan(&item.ID, &item.OrderID, &item.ProductName, &item.Quantity, &item.Price, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return models.OrderWithItems{}, fmt.Errorf("failed to scan order item: %w", err)
+		}
+		items = append(items, item)
+	}
+	result.Order = order
+	result.Items = items
+	return result, nil
 }
 
-func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) error {
+func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) (err error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-			fmt.Printf("failed to rollback transaction: %v\n", err)
-			return
-		} else {
-			err = tx.Commit(ctx)
-			if err != nil {
-				fmt.Printf("failed to commit transaction: %v\n", err)
-				return
-			}
-		}
-	}()
+
+	defer tx.Rollback(ctx)
 
 	timeNow := time.Now()
 	var insertedOrderID int
 
-	query := "INSERT INTO orders (customer_name, total_amount, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id"
-	err = tx.QueryRow(ctx, query, order.CustomerName, order.TotalAmount, order.Status, timeNow, timeNow).Scan(&insertedOrderID)
+	// Insert the order and get its ID
+	orderQuery := "INSERT INTO orders (customer_name, total_amount, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+	err = tx.QueryRow(ctx, orderQuery, order.CustomerName, order.TotalAmount, order.Status, timeNow, timeNow).Scan(&insertedOrderID)
 	if err != nil {
 		return fmt.Errorf("failed to insert order: %w", err)
 	}
 
-	// create order items if any
+	// Batch insert order items if any
 	if len(items) > 0 {
-		itemQuery := "INSERT INTO order_items (order_id, product_name, quantity, price, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)"
-		for _, item := range items {
-			_, err = tx.Exec(ctx, itemQuery, insertedOrderID, item.ProductName, item.Quantity, item.Price, timeNow, timeNow)
-			if err != nil {
-				return err
-			}
+		rows := make([][]interface{}, len(items))
+		for i, item := range items {
+			rows[i] = []interface{}{insertedOrderID, item.ProductName, item.Quantity, item.Price, timeNow, timeNow}
 		}
+
+		_, err = tx.CopyFrom(
+			ctx,
+			pgx.Identifier{"order_items"},
+			[]string{"order_id", "product_name", "quantity", "price", "created_at", "updated_at"},
+			pgx.CopyFromRows(rows),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to batch insert order items: %w", err)
+		}
+	}
+
+	// Commit the transaction
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
 }
 
-func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) error {
+func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (err error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-			fmt.Printf("failed to rollback transaction: %v\n", err)
-			return
-		} else {
-			err = tx.Commit(ctx)
-			if err != nil {
-				fmt.Printf("failed to commit transaction: %v\n", err)
-				return
-			}
-		}
-	}()
+	defer tx.Rollback(ctx)
 
-	query := "UPDATE orders SET customer_name = $1, total_amount = $2, status = $3, updated_at = $4 WHERE id = $5"
-	_, err = tx.Exec(ctx, query, order.CustomerName, order.TotalAmount, order.Status, time.Now(), order.ID)
+	query := "UPDATE orders SET status = $1, updated_at = $2 WHERE id = $3"
+	_, err = tx.Exec(ctx, query, order.Status, order.UpdatedAt, order.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update order: %w", err)
 	}
 
-	order.UpdatedAt = time.Now()
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
 
-func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
+func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-		} else {
-			err = tx.Commit(ctx)
-		}
-	}()
+	defer tx.Rollback(ctx)
 
 	query := "DELETE FROM orders WHERE id = $1"
 	_, err = tx.Exec(ctx, query, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to delete order: %w", err)
 	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }

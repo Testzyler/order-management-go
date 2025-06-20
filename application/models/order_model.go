@@ -29,10 +29,9 @@ type CreateOrderInput struct {
 }
 
 type UpdateOrderInput struct {
-	ID           int     `json:"id"`
-	CustomerName string  `json:"customer_name"`
-	TotalAmount  float64 `json:"total_amount"`
-	Status       Status  `json:"status"`
+	ID        int       `json:"id"`
+	Status    Status    `json:"status"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type OrderItem struct {

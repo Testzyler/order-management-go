@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"errors"
+	"log"
 	"time"
 
 	"github.com/Testzyler/order-management-go/application/domain"
@@ -38,30 +40,37 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	if err != nil {
 		return err
 	}
+
+	log.Printf("Order created successfully for customer %s with total amount %.2f", input.CustomerName, order.TotalAmount)
 	return nil
 }
 
-func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.Order, error) {
+func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
 	order, err := s.repo.GetOrderById(ctx, id)
 	if err != nil {
-		return models.Order{}, err
+		return models.OrderWithItems{}, err
 	}
+	if order.ID == 0 {
+		log.Printf("Order with ID %d not found", id)
+		return models.OrderWithItems{}, errors.New("order not found")
+	}
+
+	log.Printf("Order %d retrieved successfully", id)
 	return order, nil
 }
 
 func (s *OrderService) UpdateOrder(ctx context.Context, order models.UpdateOrderInput) error {
 	orderToUpdate := models.Order{
-		ID:           order.ID,
-		CustomerName: order.CustomerName,
-		TotalAmount:  order.TotalAmount,
-		Status:       order.Status,
-		UpdatedAt:    time.Now(),
+		ID:        order.ID, // Assuming ID is part of UpdateOrderInput
+		Status:    order.Status,
+		UpdatedAt: time.Now(),
 	}
 	// Assuming Items are not updated in this case, if needed, handle accordingly
 	err := s.repo.UpdateOrder(ctx, orderToUpdate)
 	if err != nil {
 		return err
 	}
+	log.Printf("Order %d updated successfully with status %s", order.ID, order.Status)
 	return nil
 }
 
