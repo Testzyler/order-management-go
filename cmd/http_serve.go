@@ -14,6 +14,45 @@ import (
 	"github.com/spf13/viper"
 )
 
+var ServeCmd = &cobra.Command{
+	Use:   "http-serve",
+	Short: "serve http server",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Initialize logger first
+		if err := initLogger(); err != nil {
+			logger.Fatalf("Failed to initialize logger: %v", err)
+		}
+
+		appLogger := logger.WithComponent("main")
+		appLogger.Info("Starting order management application")
+
+		// Initialize services
+		initPostgresql()
+		initHttpServer()
+
+		appLogger.Info("All services initialized successfully")
+
+		// Wait for interrupt signal to gracefully shut down the server
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+
+		appLogger.Info("Shutting down server...")
+
+		// Shutdown services
+		shutdownHttpServer()
+		shutdownPostgresql()
+
+		wg.Wait()
+
+		appLogger.Info("Server gracefully stopped")
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(ServeCmd)
+}
+
 func initConfig() {
 	if configFile != "" {
 		viper.SetConfigFile(configFile)
@@ -85,43 +124,4 @@ func shutdownPostgresql() {
 			fmt.Fprintf(os.Stderr, "error closing database connection: %v\n", err)
 		}
 	}
-}
-
-var ServeCmd = &cobra.Command{
-	Use:   "http-serve",
-	Short: "serve http server",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Initialize logger first
-		if err := initLogger(); err != nil {
-			logger.Fatalf("Failed to initialize logger: %v", err)
-		}
-
-		appLogger := logger.WithComponent("main")
-		appLogger.Info("Starting order management application")
-
-		// Initialize services
-		initPostgresql()
-		initHttpServer()
-
-		appLogger.Info("All services initialized successfully")
-
-		// Wait for interrupt signal to gracefully shut down the server
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
-
-		appLogger.Info("Shutting down server...")
-
-		// Shutdown services
-		shutdownHttpServer()
-		shutdownPostgresql()
-
-		wg.Wait()
-
-		appLogger.Info("Server gracefully stopped")
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(ServeCmd)
 }

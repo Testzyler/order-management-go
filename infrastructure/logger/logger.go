@@ -17,14 +17,14 @@ type Logger struct {
 }
 
 type LoggerConfig struct {
-	Level       string `yaml:"Level" mapstructure:"level"`
-	Format      string `yaml:"Format" mapstructure:"format"` // "json" or "compact"
-	AddSource   bool   `yaml:"AddSource" mapstructure:"add_source"`
-	TimeFormat  string `yaml:"TimeFormat" mapstructure:"time_format"`
-	Output      string `yaml:"Output" mapstructure:"output"`            // "stdout", "stderr", or file path (used when EnableFile is false)
-	EnableColor bool   `yaml:"EnableColor" mapstructure:"enable_color"` // Enable colored output
-	EnableFile  bool   `yaml:"EnableFile" mapstructure:"enable_file"`   // Enable file logging
-	FilePath    string `yaml:"FilePath" mapstructure:"file_path"`       // File path when EnableFile is true
+	Level       string `yaml:"Level" mapstructure:"Level"`
+	Format      string `yaml:"Format" mapstructure:"Format"` // "json" or "compact"
+	AddSource   bool   `yaml:"AddSource" mapstructure:"AddSource"`
+	TimeFormat  string `yaml:"TimeFormat" mapstructure:"TimeFormat"`
+	Output      string `yaml:"Output" mapstructure:"Output"`           // "stdout", "stderr", or file path (used when EnableFile is false)
+	EnableColor bool   `yaml:"EnableColor" mapstructure:"EnableColor"` // Enable colored output
+	EnableFile  bool   `yaml:"EnableFile" mapstructure:"EnableFile"`   // Enable file logging
+	FilePath    string `yaml:"FilePath" mapstructure:"FilePath"`       // File path when EnableFile is true
 }
 
 var (
@@ -399,6 +399,9 @@ func (h *CompactTextHandler) Handle(ctx context.Context, record slog.Record) err
 		if f.File != "" {
 			// Extract just the filename, not the full path
 			filename := filepath.Base(f.File)
+			// if h.enableColor {
+			// 	buf.WriteString(ColorCyan)
+			// }
 			buf.WriteString(fmt.Sprintf("%s:%d", filename, f.Line))
 			if h.enableColor {
 				buf.WriteString(ColorReset)
@@ -413,6 +416,9 @@ func (h *CompactTextHandler) Handle(ctx context.Context, record slog.Record) err
 	// Add attributes if any
 	record.Attrs(func(attr slog.Attr) bool {
 		buf.WriteString(" ")
+		// if h.enableColor {
+		// 	buf.WriteString(ColorCyan)
+		// }
 		buf.WriteString(attr.Key)
 		if h.enableColor {
 			buf.WriteString(ColorReset)

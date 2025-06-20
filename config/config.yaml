@@ -11,10 +11,10 @@ Database:
   DatabaseSchema: store
 
 Logger:
-  Format: compact     # ✅ For colored output
   Level: debug
+  Format: compact
+  Output: stdout
   AddSource: true
-  Output: stdout      # ✅ Console output
-  EnableColor: true   # ✅ Enable colors
-  EnableFile: false   # ✅ Disable file logging for development
-  FilePath: ./logs/dev.log
+  EnableColor: true
+  EnableFile: false
+  FilePath: ./logs/dev.log  # File path (not used when EnableFile is false)

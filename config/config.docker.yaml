@@ -11,7 +11,7 @@ Database:
   DatabaseSchema: store
 
 Logger:
-  Format: json
   Level: info
+  Format: json
   AddSource: true
   Output: stdout # Docker can collect these logs
