@@ -78,8 +78,7 @@ func init() {
 
 func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 	// Get logger with request ID from context
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("order-handler")
-
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
 	var input models.CreateOrderInput
 	ctx := c.Context()
 
@@ -123,8 +122,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 
 func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 	// Get logger with request ID from context
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("order-handler")
-
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
 	ctx := c.Context()
 	id := c.Params("id")
 
@@ -179,7 +177,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 }
 
 func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("order-handler")
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
 	ctx := c.Context()
 	id := c.Params("id")
 
@@ -222,7 +220,7 @@ func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
 }
 
 func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("order-handler")
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
 	ctx := c.Context()
 	id := c.Params("id")
 
@@ -256,7 +254,7 @@ func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
 }
 
 func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("order-handler")
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
 	ctx := c.Context()
 	page := c.Query("page", "1")
 	size := c.Query("size", "10")

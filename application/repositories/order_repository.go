@@ -2,8 +2,6 @@ package repositories
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/Testzyler/order-management-go/application/models"
@@ -22,7 +20,7 @@ func NewOrderRepository(db *pgxpool.Pool) *orderRepository {
 }
 
 func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error) {
-	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	if input.Page < 1 {
 		input.Page = 1
@@ -117,8 +115,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 }
 
 func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
-	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
-
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	var result models.OrderWithItems
 	var order models.Order
 	query := `
@@ -136,17 +133,6 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 	)
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order query cancelled", "order_id", id)
-			return models.OrderWithItems{}, err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order query timed out", "order_id", id)
-			return models.OrderWithItems{}, err
-		}
-		if err == sql.ErrNoRows {
-			return models.OrderWithItems{}, err
-		}
 		repoLogger.WithError(err).Error("Failed to query order", "order_id", id)
 		return models.OrderWithItems{}, err
 	}
@@ -158,14 +144,6 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 
 	itemRows, err := r.db.Query(ctx, itemQuery, id)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			repoLogger.Warn("Order items query cancelled", "order_id", id)
-			return models.OrderWithItems{}, err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order items query timed out", "order_id", id)
-			return models.OrderWithItems{}, err
-		}
 		repoLogger.WithError(err).Error("Failed to fetch order items", "order_id", id)
 		return models.OrderWithItems{}, fmt.Errorf("failed to fetch order items: %w", err)
 	}
@@ -188,7 +166,7 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 }
 
 func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) (err error) {
-	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -210,10 +188,6 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 	err = tx.QueryRow(ctx, insertOrderQuery, order.CustomerName, order.TotalAmount, order.Status, order.CreatedAt, order.UpdatedAt).Scan(&insertedOrderID)
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order insertion cancelled or timed out")
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to insert order", "customer", order.CustomerName)
 		return fmt.Errorf("failed to insert order: %w", err)
 	}
@@ -225,10 +199,6 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 		for i, item := range items {
 			_, err = tx.Exec(ctx, insertItemsQuery, insertedOrderID, item.ProductName, item.Quantity, item.Price, item.CreatedAt, item.UpdatedAt)
 			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					repoLogger.Warn("Order items insertion cancelled or timed out", "order_id", insertedOrderID)
-					return err
-				}
 				repoLogger.WithError(err).Error("Failed to insert order item", "order_id", insertedOrderID, "product", item.ProductName, "index", i)
 				return fmt.Errorf("failed to insert order item: %w", err)
 			}
@@ -237,10 +207,6 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 
 	// Commit transaction
 	if err = tx.Commit(ctx); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction commit cancelled or timed out", "order_id", insertedOrderID)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to commit transaction", "order_id", insertedOrderID)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -249,14 +215,10 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 }
 
 func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (err error) {
-	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction begin cancelled or timed out", "order_id", order.ID)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to begin transaction", "order_id", order.ID)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -272,10 +234,6 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (
 	result, err := tx.Exec(ctx, query, order.Status, order.UpdatedAt, order.ID)
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order update cancelled or timed out", "order_id", order.ID)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to update order", "order_id", order.ID)
 		return fmt.Errorf("failed to update order: %w", err)
 	}
@@ -287,10 +245,6 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction commit cancelled or timed out", "order_id", order.ID)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to commit transaction", "order_id", order.ID)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -299,14 +253,10 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (
 }
 
 func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
-	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction begin cancelled or timed out", "order_id", id)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to begin transaction", "order_id", id)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -322,10 +272,6 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
 	deleteItemsQuery := "DELETE FROM order_items WHERE order_id = $1"
 	_, err = tx.Exec(ctx, deleteItemsQuery, id)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order items deletion cancelled or timed out", "order_id", id)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to delete order items", "order_id", id)
 		return fmt.Errorf("failed to delete order items: %w", err)
 	}
@@ -334,10 +280,6 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
 	deleteOrderQuery := "DELETE FROM orders WHERE id = $1"
 	orderResult, err := tx.Exec(ctx, deleteOrderQuery, id)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Order deletion cancelled or timed out", "order_id", id)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to delete order", "order_id", id)
 		return fmt.Errorf("failed to delete order: %w", err)
 	}
@@ -349,10 +291,6 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			repoLogger.Warn("Transaction commit cancelled or timed out", "order_id", id)
-			return err
-		}
 		repoLogger.WithError(err).Error("Failed to commit transaction", "order_id", id)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}

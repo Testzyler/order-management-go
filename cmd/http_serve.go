@@ -23,7 +23,7 @@ var ServeCmd = &cobra.Command{
 			logger.Fatalf("Failed to initialize logger: %v", err)
 		}
 
-		appLogger := logger.WithComponent("main")
+		appLogger := logger.GetDefault()
 		appLogger.Info("Starting order management application")
 
 		// Initialize services

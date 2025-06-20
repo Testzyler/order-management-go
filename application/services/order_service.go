@@ -22,8 +22,7 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
 	// Use logger with request ID from context
-	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	// Validate input
 	if input.CustomerName == "" {
 		serviceLogger.Error("Customer name is required")
@@ -67,15 +66,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	err := s.repo.CreateOrder(ctx, order, items)
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			serviceLogger.Warn("Repository call cancelled", "customer", input.CustomerName)
-			return err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			serviceLogger.Warn("Repository call timed out", "customer", input.CustomerName)
-			return err
-		}
-
 		serviceLogger.WithError(err).Error("Failed to create order", "customer", input.CustomerName, "total", order.TotalAmount)
 		return err
 	}
@@ -84,8 +74,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 }
 
 func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
-	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	// Validate input
 	if id <= 0 {
 		serviceLogger.Error("Invalid order ID", "order_id", id)
@@ -95,15 +84,6 @@ func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.OrderWi
 	order, err := s.repo.GetOrderById(ctx, id)
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			serviceLogger.Warn("Repository call cancelled", "order_id", id)
-			return models.OrderWithItems{}, err
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			serviceLogger.Warn("Repository call timed out", "order_id", id)
-			return models.OrderWithItems{}, err
-		}
-
 		serviceLogger.WithError(err).Error("Failed to get order", "order_id", id)
 		return models.OrderWithItems{}, err
 	}
@@ -117,8 +97,7 @@ func (s *OrderService) GetOrderById(ctx context.Context, id int) (models.OrderWi
 }
 
 func (s *OrderService) UpdateOrder(ctx context.Context, order models.UpdateOrderInput) error {
-	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	orderToUpdate := models.Order{
 		ID:        order.ID,
 		Status:    order.Status,
@@ -135,8 +114,7 @@ func (s *OrderService) UpdateOrder(ctx context.Context, order models.UpdateOrder
 }
 
 func (s *OrderService) DeleteOrder(ctx context.Context, id int) error {
-	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	err := s.repo.DeleteOrder(ctx, id)
 	if err != nil {
 		serviceLogger.WithError(err).Error("Failed to delete order", "order_id", id)
@@ -147,8 +125,7 @@ func (s *OrderService) DeleteOrder(ctx context.Context, id int) error {
 }
 
 func (s *OrderService) ListOrders(ctx context.Context, input models.ListInput) (models.ListPaginatedOrders, error) {
-	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-service")
-
+	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	orders, err := s.repo.ListOrders(ctx, input)
 	if err != nil {
 		serviceLogger.WithError(err).Error("Failed to list orders", "page", input.Page, "size", input.Size)

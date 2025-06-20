@@ -29,7 +29,7 @@ var DBConfig = struct {
 }
 
 func InitializeDatabase() (*pgxpool.Pool, error) {
-	log := logger.GetDefault().WithComponent("database")
+	log := logger.GetDefault()
 	log.Info("Initializing database connection...")
 
 	// Ensure configuration is loaded

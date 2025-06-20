@@ -14,7 +14,7 @@ import (
 var AppServer *fiber.App
 
 func InitHttpServer() {
-	httpLogger := logger.WithComponent("http-server")
+	httpLogger := logger.GetDefault()
 	httpLogger.Info("Initializing HTTP server")
 
 	// Initialize all handlers first (after database is ready)

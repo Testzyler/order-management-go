@@ -53,7 +53,7 @@ func LoggingMiddleware() fiber.Handler {
 			"user_agent":     c.Get("User-Agent"),
 			"content_type":   c.Get("Content-Type"),
 			"content_length": c.Get("Content-Length"),
-		}).WithComponent("http-middleware")
+		})
 
 		// Store logger in locals for handlers to use
 		c.Locals("logger", requestLogger)

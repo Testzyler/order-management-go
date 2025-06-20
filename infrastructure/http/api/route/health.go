@@ -38,7 +38,7 @@ func init() {
 
 func (h *HealthHandler) HealthCheck(c *fiber.Ctx) error {
 	// Get logger with request ID from context
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context()).WithComponent("health-handler")
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
 
 	requestLogger.Debug("Health check requested")
 
