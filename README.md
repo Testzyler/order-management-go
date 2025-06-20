@@ -68,16 +68,7 @@ Run the PostgreSQL database in a Docker container using Docker Compose.
 docker-compose up -d
 ```
 
-### 4. Initialize the Database
-
-Run the `init.sql` script to create the necessary tables. **Note: You will need to add the `order_items` table to this file.**
-
-```bash
-psql -h localhost -p 5432 -U dborder -d store -f init.sql
-```
-*Password is `SecretP@ssw0rd` as defined in `config.yaml` and `docker-compose.yaml`.*
-
-### 5. Run the Application
+### 4. Run the Application
 
 ```bash
 go run . http-serve
@@ -87,10 +78,11 @@ go run . http-serve
 
 | Method | Path | Description |
 | :--- | :--- | :--- |
-| `POST` | `/orders` | Create a new order (with items). |
-| `GET` | `/orders` | List all orders (paginated). |
-| `GET` | `/orders/{order_id}` | Get a single order by its ID. |
-| `PUT` | `/orders/{order_id}/status` | Update an order's status. |
+| `POST` | `/api/v1/orders` | Create a new order (with items). |
+| `GET` | `/api/v1/orders` | List all orders (paginated). |
+| `GET` | `/api/v1/orders/{order_id}` | Get a single order by its ID. |
+| `PUT` | `/api/v1/orders/{order_id}/status` | Update an order's status. |
+| `DELETE` | `/api/v1/orders/{order_id}` | Delete an order's by it's ID. |
 
 ## Stress Testing
 
