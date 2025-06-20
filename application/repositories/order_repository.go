@@ -23,6 +23,10 @@ func NewOrderRepository(db *pgxpool.Pool) *orderRepository {
 }
 
 func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error) {
+	// Use logger with request ID from context
+	repoLogger := logger.LoggerWithRequestIDFromContext(ctx).WithComponent("order-repository")
+	repoLogger.Debug("Fetching order from database")
+
 	if input.Page < 1 {
 		input.Page = 1
 	}
@@ -32,10 +36,10 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 	offset := (input.Page - 1) * input.Size
 
 	queryOrders := `
-	SELECT COUNT(*) OVER() AS total_count, id, customer_name, total_amount, status, created_at, updated_at 
-	FROM orders
-	ORDER BY created_at DESC
-	LIMIT $1 OFFSET $2`
+		SELECT COUNT(*) OVER() AS total_count, id, customer_name, total_amount, status, created_at, updated_at 
+		FROM orders
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2`
 
 	rows, err := r.db.Query(ctx, queryOrders, input.Size, offset)
 	if err != nil {
@@ -96,6 +100,12 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 	}
 
 	totalPages := (total + input.Size - 1) / input.Size
+	repoLogger.Debug("Orders fetched successfully", "total", total, "page", input.Page, "size", input.Size, "total_pages", totalPages)
+	if err := itemRows.Err(); err != nil {
+		repoLogger.WithError(err).Error("Error scanning order items")
+		return nil, fmt.Errorf("error scanning order items: %w", err)
+	}
+	repoLogger.Info("Order items fetched successfully", "item_count", len(orderWithItems))
 	return &models.ListPaginatedOrders{
 		Data:       orderWithItems,
 		Total:      total,

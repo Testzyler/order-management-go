@@ -1,0 +1,19 @@
+HttpServer:
+  Port: 3333
+
+Database:
+  Username: dborder
+  Password: SecretP@ssw0rd
+  Host: localhost
+  Port: 5432
+  DatabaseName: store
+  DatabaseSchema: store
+
+Logger:
+  Format: json
+  Level: debug        # More verbose for development
+  AddSource: true
+  Output: stdout      # Output to console for development
+  EnableColor: true   # Enable colored output for compact format
+  EnableFile: true   # Disable file logging for development
+  FilePath: ./logs/dev.log  # File path (not used when EnableFile is false)

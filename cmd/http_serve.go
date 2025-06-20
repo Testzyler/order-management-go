@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/Testzyler/order-management-go/infrastructure/database"
@@ -19,8 +20,10 @@ func initConfig() {
 	} else {
 		viper.AddConfigPath("./config")
 		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
 	}
+
+	replacer := strings.NewReplacer(".", "_")
+	viper.SetEnvKeyReplacer(replacer)
 
 	viper.AutomaticEnv()
 

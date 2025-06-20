@@ -21,8 +21,10 @@ type LoggerConfig struct {
 	Format      string `yaml:"Format" mapstructure:"format"` // "json" or "compact"
 	AddSource   bool   `yaml:"AddSource" mapstructure:"add_source"`
 	TimeFormat  string `yaml:"TimeFormat" mapstructure:"time_format"`
-	Output      string `yaml:"Output" mapstructure:"output"`             // "stdout", "stderr", or file path
+	Output      string `yaml:"Output" mapstructure:"output"`            // "stdout", "stderr", or file path (used when EnableFile is false)
 	EnableColor bool   `yaml:"EnableColor" mapstructure:"enable_color"` // Enable colored output
+	EnableFile  bool   `yaml:"EnableFile" mapstructure:"enable_file"`   // Enable file logging
+	FilePath    string `yaml:"FilePath" mapstructure:"file_path"`       // File path when EnableFile is true
 }
 
 var (
@@ -37,9 +39,20 @@ func Initialize(config LoggerConfig) error {
 		return err
 	}
 
-	output, err := getOutput(config.Output)
-	if err != nil {
-		return err
+	// Determine output based on EnableFile flag
+	var output io.Writer
+	if config.EnableFile && config.FilePath != "" {
+		// Use file path when EnableFile is true
+		output, err = getOutput(config.FilePath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize file output: %w", err)
+		}
+	} else {
+		// Use regular output (stdout/stderr) when EnableFile is false
+		output, err = getOutput(config.Output)
+		if err != nil {
+			return fmt.Errorf("failed to initialize output: %w", err)
+		}
 	}
 
 	var handler slog.Handler
@@ -262,10 +275,15 @@ func getOutput(output string) (io.Writer, error) {
 	case "stderr":
 		return os.Stderr, nil
 	default:
-		// Assume it's a file path
+		// Assume it's a file path - create directory if it doesn't exist
+		dir := filepath.Dir(output)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create log directory %s: %w", dir, err)
+		}
+
 		file, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to open log file %s: %w", output, err)
 		}
 		return file, nil
 	}

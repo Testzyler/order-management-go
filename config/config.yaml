@@ -11,8 +11,10 @@ Database:
   DatabaseSchema: store
 
 Logger:
-  Format: compact
-  Level: info
+  Format: compact     # ✅ For colored output
+  Level: debug
   AddSource: true
-  Output: /log/app.log # Docker can collect these logs
-  EnableColor: true  # Enable colored output for compact format
+  Output: stdout      # ✅ Console output
+  EnableColor: true   # ✅ Enable colors
+  EnableFile: false   # ✅ Disable file logging for development
+  FilePath: ./logs/dev.log

@@ -1,0 +1,17 @@
+HttpServer:
+  Port: 8080
+
+Database:
+  Username: dborder
+  Password: SecretP@ssw0rd
+  Host: postgres  # Docker service name
+  Port: 5432
+  DatabaseName: store
+  DatabaseSchema: store
+
+Logger:
+  Format: json        # JSON format for production (better for log aggregation)
+  Level: info         # Less verbose for production
+  AddSource: true    # Don't include source file info in production
+  Output: stdout      # Not used when EnableFile is true
+  EnableColor: false  # No colors in production
