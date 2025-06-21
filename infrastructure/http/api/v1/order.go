@@ -100,7 +100,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	// requestLogger.Info("Order created successfully", "duration_ms", duration.Milliseconds())
+	requestLogger.Info("Order created successfully", "duration_ms", duration.Milliseconds())
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message": "Order created successfully",
 	})
