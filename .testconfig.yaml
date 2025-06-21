@@ -1,0 +1,31 @@
+# Test Configuration for Go Project
+
+# Coverage settings
+coverage:
+  threshold: 80  # Minimum coverage percentage
+  exclude_files:
+    - "**/*_mock.go"
+    - "**/vendor/**"
+    - "**/testdata/**"
+  
+# Benchmark settings
+benchmark:
+  count: 3  # Number of times to run each benchmark
+  timeout: "10m"  # Maximum time for benchmark tests
+  
+# Profile settings
+profiling:
+  cpu_time: "30s"  # Duration for CPU profiling
+  memory_rate: 1   # Memory profiling rate
+  
+# Test settings
+tests:
+  timeout: "30s"   # Default timeout for tests
+  parallel: true   # Run tests in parallel
+  race: true       # Enable race detection in CI
+  
+# CI/CD settings
+ci:
+  upload_coverage: false
+  fail_on_coverage_drop: false
+  coverage_format: "cobertura"

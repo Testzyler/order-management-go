@@ -6,3 +6,7 @@ __debug_*
 *.bak
 bin/
 logs/
+coverage/
+profiles/
+coverage*
+*.test
