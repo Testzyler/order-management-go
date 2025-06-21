@@ -3,7 +3,7 @@ package route
 import (
 	"github.com/Testzyler/order-management-go/application/constants"
 	"github.com/Testzyler/order-management-go/infrastructure/database"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/gofiber/fiber/v2"
 )
 
 type Routes []Route
@@ -56,6 +56,24 @@ func InitializeAllHandlers() {
 	}
 }
 
-func GetDatabasePool() *pgxpool.Pool {
+func GetDatabasePool() database.DatabaseInterface {
 	return database.DatabasePool
+}
+
+func AddRoutesPrefix(router *fiber.Router) fiber.Router {
+	for _, routeDefinition := range RouteDefinitions {
+		routerWithPrefix := (*router).Group(routeDefinition.Prefix)
+		for _, route := range routeDefinition.Routes {
+			if route.Method == constants.METHOD_GET {
+				routerWithPrefix.Get(route.Path, route.HandlerFunc)
+			} else if route.Method == constants.METHOD_POST {
+				routerWithPrefix.Post(route.Path, route.HandlerFunc)
+			} else if route.Method == constants.METHOD_DELETE {
+				routerWithPrefix.Delete(route.Path, route.HandlerFunc)
+			} else if route.Method == constants.METHOD_PUT {
+				routerWithPrefix.Put(route.Path, route.HandlerFunc)
+			}
+		}
+	}
+	return *router
 }

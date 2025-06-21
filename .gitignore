@@ -5,3 +5,4 @@ __debug_*
 *.swo
 *.bak
 bin/
+logs/

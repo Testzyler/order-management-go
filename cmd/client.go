@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/Testzyler/order-management-go/application/models"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	faker "github.com/bxcodec/faker/v4"
 	"github.com/spf13/cobra"
 )
@@ -40,13 +40,13 @@ func init() {
 }
 
 func RunStressTest(numOrders, batchSize, concurrency int, apiURL string) {
-	log.Println("Starting stress test for Online Order Management System API...")
+	logger.Info("Starting stress test for Online Order Management System API...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), totalTimeout)
 	defer cancel()
 
 	ordersToCreate := generateDummyOrders(numOrders)
-	log.Printf("Generated %d dummy orders.", len(ordersToCreate))
+	logger.Infof("Generated %d dummy orders.", len(ordersToCreate))
 
 	var orderBatches [][]models.CreateOrderInput
 	for i := 0; i < len(ordersToCreate); i += batchSize {
@@ -56,7 +56,7 @@ func RunStressTest(numOrders, batchSize, concurrency int, apiURL string) {
 		}
 		orderBatches = append(orderBatches, ordersToCreate[i:end])
 	}
-	log.Printf("Divided orders into %d batches.", len(orderBatches))
+	logger.Infof("Divided orders into %d batches.", len(orderBatches))
 
 	var wg sync.WaitGroup
 	results := make(chan error, numOrders)
@@ -72,17 +72,17 @@ func RunStressTest(numOrders, batchSize, concurrency int, apiURL string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			log.Printf("Sending order %d...", index+1)
+			logger.Infof("Sending order %d...", index+1)
 
 			reqCtx, cancel := context.WithTimeout(ctx, totalTimeout)
 			defer cancel()
 
 			err := sendBulkOrderRequest(reqCtx, order, apiURL)
 			if err != nil {
-				log.Printf("Error sending order %d: %v", index+1, err)
+				logger.Errorf("Error sending order %d: %v", index+1, err)
 				results <- err
 			} else {
-				log.Printf("Successfully sent order %d.", index+1)
+				logger.Infof("Successfully sent order %d.", index+1)
 				results <- nil
 			}
 		}(i, order)
@@ -104,11 +104,11 @@ func RunStressTest(numOrders, batchSize, concurrency int, apiURL string) {
 
 	duration := time.Since(startTime)
 
-	log.Printf("\n--- Stress Test Summary ---")
-	log.Printf("Total Orders Sent: %d", numOrders)
-	log.Printf("Successful Orders: %d", successCount)
-	log.Printf("Failed Orders: %d", errorCount)
-	log.Printf("Total Duration: %s", duration)
+	logger.Infof("\n--- Stress Test Summary ---")
+	logger.Infof("Total Orders Sent: %d", numOrders)
+	logger.Infof("Successful Orders: %d", successCount)
+	logger.Infof("Failed Orders: %d", errorCount)
+	logger.Infof("Total Duration: %s", duration)
 }
 
 func generateDummyOrders(count int) []models.CreateOrderInput {
@@ -138,7 +138,7 @@ func sendBulkOrderRequest(ctx context.Context, order models.CreateOrderInput, ap
 	payload, err := json.Marshal(order)
 	if err != nil {
 		return fmt.Errorf("failed to marshal orders: %w", err)
-}
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(payload))
 	if err != nil {

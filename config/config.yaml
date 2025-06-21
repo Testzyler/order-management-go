@@ -1,6 +1,9 @@
-
 HttpServer:
   Port: 3333
+  RequestTimeout: 30s      # Default request timeout
+  ServerTimeout: 60s       # Server read/write timeout
+  IdleTimeout: 120s        # Connection idle timeout
+  ShutdownTimeout: 30s     # Graceful shutdown timeout
 
 Database:
   Username: dborder
@@ -9,3 +12,14 @@ Database:
   Port: 5432
   DatabaseName: store
   DatabaseSchema: store
+  QueryTimeout: 15s        # Database query timeout
+  ConnectionTimeout: 10s   # Database connection timeout
+
+Logger:
+  Format: compact
+  Level: info        # More verbose for development
+  AddSource: true
+  Output: stdout      # Output to console for development
+  EnableColor: true   # Enable colored output for compact format
+  EnableFile: false   # Disable file logging for development
+  FilePath: ./logs/dev.log  # File path (not used when EnableFile is false)

@@ -1,7 +1,9 @@
-package route
+package api
 
 import (
 	"github.com/Testzyler/order-management-go/application/constants"
+	"github.com/Testzyler/order-management-go/infrastructure/http/api/route"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -17,10 +19,10 @@ func (h *HealthHandler) Initialize() {
 }
 
 // GetRouteDefinition implements HandlerInitializer interface
-func (h *HealthHandler) GetRouteDefinition() RouteDefinition {
-	return RouteDefinition{
-		Routes: Routes{
-			Route{
+func (h *HealthHandler) GetRouteDefinition() route.RouteDefinition {
+	return route.RouteDefinition{
+		Routes: route.Routes{
+			route.Route{
 				Name:        "HealthCheck",
 				Path:        "/healthz",
 				Method:      constants.METHOD_GET,
@@ -31,14 +33,21 @@ func (h *HealthHandler) GetRouteDefinition() RouteDefinition {
 	}
 }
 
-func (h *HealthHandler) HealthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
-		"status":  "OK",
-		"message": "Service is healthy",
-	})
+func init() {
+	route.RegisterHandler(NewHealthHandler())
 }
 
-// Auto-register the health handler
-func init() {
-	RegisterHandler(NewHealthHandler())
+func (h *HealthHandler) HealthCheck(c *fiber.Ctx) error {
+	// Get logger with request ID from context
+	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
+
+	requestLogger.Debug("Health check requested")
+
+	response := fiber.Map{
+		"status":  "OK",
+		"message": "Service is healthy",
+	}
+
+	requestLogger.Info("Health check completed successfully")
+	return c.JSON(response)
 }
