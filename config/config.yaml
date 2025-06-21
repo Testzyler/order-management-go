@@ -1,6 +1,6 @@
 HttpServer:
   Port: 3333
-  RequestTimeout: 30s      # Default request timeout
+  RequestTimeout: 1s      # Default request timeout
   ServerTimeout: 60s       # Server read/write timeout
   IdleTimeout: 120s        # Connection idle timeout
   ShutdownTimeout: 30s     # Graceful shutdown timeout

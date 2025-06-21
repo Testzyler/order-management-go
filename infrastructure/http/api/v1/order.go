@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -77,8 +76,7 @@ func init() {
 }
 
 func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
-	ctx, cancel := context.WithCancel(c.Context())
-	defer cancel()
+	ctx := c.UserContext()
 
 	// Get logger with request ID from context
 	requestLogger := logger.LoggerWithRequestIDFromContext(ctx)
@@ -109,9 +107,8 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 }
 
 func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
-	// Get logger with request ID from context
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
-	ctx := c.Context()
+	ctx := c.UserContext()
+	requestLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	id := c.Params("id")
 
 	if id == "" {
@@ -132,21 +129,7 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 	start := time.Now()
 	order, err := h.service.GetOrderById(ctx, idInt)
 	duration := time.Since(start)
-
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			requestLogger.Warn("Request cancelled by client", "order_id", idInt, "duration_ms", duration.Milliseconds())
-			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message": "Request was cancelled by client",
-			})
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			requestLogger.Warn("Request timed out", "order_id", idInt, "duration_ms", duration.Milliseconds())
-			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message": "Request timed out",
-			})
-		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			requestLogger.Warn("Order not found", "order_id", idInt)
 			return c.Status(fiber.ErrNotFound.Code).JSON(fiber.Map{
@@ -165,10 +148,9 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 }
 
 func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
-	ctx := c.Context()
+	ctx := c.UserContext()
+	requestLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	id := c.Params("id")
-
 	if id == "" {
 		requestLogger.Error("Order ID is required for update")
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
@@ -208,8 +190,8 @@ func (h *OrderHandler) UpdateOrder(c *fiber.Ctx) error {
 }
 
 func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
-	ctx := c.Context()
+	ctx := c.UserContext()
+	requestLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	id := c.Params("id")
 
 	if id == "" {
@@ -242,8 +224,8 @@ func (h *OrderHandler) DeleteOrder(c *fiber.Ctx) error {
 }
 
 func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
-	ctx := c.Context()
+	ctx := c.UserContext()
+	requestLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	page := c.Query("page", "1")
 	size := c.Query("size", "10")
 

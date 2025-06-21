@@ -7,6 +7,7 @@ import (
 	"github.com/Testzyler/order-management-go/application/models"
 	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pkg/errors"
 )
 
 type orderRepository struct {
@@ -20,11 +21,6 @@ func NewOrderRepository(db *pgxpool.Pool) *orderRepository {
 }
 
 func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error) {
-	// Check if context is already cancelled or timed out before starting
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	if input.Page < 1 {
@@ -43,15 +39,6 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 
 	rows, err := r.db.Query(ctx, queryOrders, input.Size, offset)
 	if err != nil {
-		// Check if error is due to context cancellation
-		if err == context.Canceled {
-			repoLogger.Warn("Query cancelled by context")
-			return nil, context.Canceled
-		}
-		if err == context.DeadlineExceeded {
-			repoLogger.Warn("Query timed out")
-			return nil, context.DeadlineExceeded
-		}
 		repoLogger.WithError(err).Error("Failed to query orders")
 		return nil, err
 	}
@@ -181,11 +168,11 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 
 func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) (err error) {
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
-
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		repoLogger.WithError(err).Error("Failed to begin transaction")
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		err = errors.Wrap(err, "failed to begin transaction")
+		return err
 	}
 	defer func() {
 		if err != nil {

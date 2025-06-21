@@ -9,7 +9,6 @@ import (
 	"github.com/Testzyler/order-management-go/infrastructure/http/middleware"
 	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/spf13/viper"
 )
 
@@ -28,6 +27,14 @@ func InitHttpServer(ctx context.Context) {
 	writeTimeout := viper.GetDuration("HttpServer.ServerTimeout")
 	idleTimeout := viper.GetDuration("HttpServer.IdleTimeout")
 	requestTimeout := viper.GetDuration("HttpServer.RequestTimeout")
+
+	httpLogger.Info("HTTP server configuration",
+		"port", httpPort,
+		"read_timeout", readTimeout,
+		"write_timeout", writeTimeout,
+		"idle_timeout", idleTimeout,
+		"request_timeout", requestTimeout,
+	)
 
 	// Set defaults if not configured
 	if readTimeout == 0 {
@@ -49,25 +56,20 @@ func InitHttpServer(ctx context.Context) {
 		WriteTimeout:          writeTimeout,
 		IdleTimeout:           idleTimeout,
 	})
-	// Add middleware for context and timeout management
 
-	AppServer.Use(recover.New())
 	AppServer.Use(middleware.ContextMiddleware(ctx))
 	AppServer.Use(middleware.CancellationMiddleware())
 	AppServer.Use(middleware.TimeoutMiddleware(requestTimeout))
 	AppServer.Use(middleware.RequestIDMiddleware())
+	AppServer.Use(middleware.RecoveryMiddleware())
 
-	// Add Api Path (includes health check now)
+	// Add root level routes (like /healthz) directly to AppServer
+	baseRouter := AppServer.Group("")
+	api.AddRootRoutes(&baseRouter)
+
+	// Add API routes under /api prefix
 	apiGroup := AppServer.Group("/api")
 	api.AddRoute(&apiGroup)
-
-	// Add health check at root level
-	AppServer.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status":  "OK",
-			"message": "Service is healthy",
-		})
-	})
 
 	// Start Server in goroutine
 	go func() {
@@ -88,19 +90,15 @@ func ShutdownHttpServer() {
 	logger := logger.GetDefault()
 	logger.Info("HTTP server is shutting down")
 
-	// Get shutdown timeout from configuration
 	shutdownTimeout := viper.GetDuration("HttpServer.ShutdownTimeout")
 	if shutdownTimeout == 0 {
 		shutdownTimeout = 30 * time.Second
 	}
 
-	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	// Create a channel to signal shutdown completion
 	done := make(chan error, 1)
-
 	go func() {
 		done <- AppServer.Shutdown()
 	}()

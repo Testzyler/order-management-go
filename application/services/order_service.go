@@ -21,7 +21,6 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
-	// Use logger with request ID from context
 	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	// Validate input
@@ -67,16 +66,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	err := s.repo.CreateOrder(ctx, order, items)
 
 	if err != nil {
-		// Check if error is due to context cancellation or timeout
-		if err == context.Canceled {
-			serviceLogger.Warn("Order creation cancelled", "customer", input.CustomerName)
-			return context.Canceled
-		}
-		if err == context.DeadlineExceeded {
-			serviceLogger.Warn("Order creation timed out", "customer", input.CustomerName)
-			return context.DeadlineExceeded
-		}
-
 		serviceLogger.WithError(err).Error("Failed to create order", "customer", input.CustomerName, "total", order.TotalAmount)
 		return err
 	}
