@@ -12,6 +12,8 @@ Database:
   Port: 5432
   DatabaseName: store
   DatabaseSchema: store
+  QueryTimeout: 15s   
+  ConnectionTimeout: 10s
 
 Logger:
   Format: json

@@ -4,7 +4,6 @@ import (
 	"github.com/Testzyler/order-management-go/application/constants"
 	"github.com/Testzyler/order-management-go/infrastructure/database"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Routes []Route
@@ -57,7 +56,7 @@ func InitializeAllHandlers() {
 	}
 }
 
-func GetDatabasePool() *pgxpool.Pool {
+func GetDatabasePool() database.DatabaseInterface {
 	return database.DatabasePool
 }
 

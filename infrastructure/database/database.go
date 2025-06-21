@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var DatabasePool *pgxpool.Pool
+var DatabasePool DatabaseInterface
 var DBConfig = struct {
 	Username       string
 	Password       string
@@ -28,7 +28,7 @@ var DBConfig = struct {
 	DatabaseSchema: viper.GetString("Database.DatabaseSchema"),
 }
 
-func InitializeDatabase() (*pgxpool.Pool, error) {
+func InitializeDatabase() (DatabaseInterface, error) {
 	log := logger.GetDefault()
 	log.Info("Initializing database connection...")
 
@@ -64,7 +64,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	return db, nil
 }
 
-func NewDatabaseConnection() (*pgxpool.Pool, error) {
+func NewDatabaseConnection() (DatabaseInterface, error) {
 	if DatabasePool == nil {
 		db, err := InitializeDatabase()
 		if err != nil {
