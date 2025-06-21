@@ -7,7 +7,7 @@ import (
 
 	"github.com/Testzyler/order-management-go/application/domain"
 	"github.com/Testzyler/order-management-go/application/models"
-	"github.com/Testzyler/order-management-go/infrastructure/logger"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 )
 
 type OrderService struct {
@@ -21,8 +21,23 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
+	// Check if context is already cancelled or timed out before starting
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	// Use logger with request ID from context
 	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
+
+	// Create a timeout context for database operations if not already set
+	dbCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		// No deadline set, create one for database operations
+		var cancel context.CancelFunc
+		dbCtx, cancel = context.WithTimeout(ctx, 15*time.Second) // Database operation timeout
+		defer cancel()
+	}
+
 	// Validate input
 	if input.CustomerName == "" {
 		serviceLogger.Error("Customer name is required")
@@ -63,9 +78,19 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	}
 
 	order.TotalAmount = totalAmount
-	err := s.repo.CreateOrder(ctx, order, items)
+	err := s.repo.CreateOrder(dbCtx, order, items)
 
 	if err != nil {
+		// Check if error is due to context cancellation or timeout
+		if err == context.Canceled {
+			serviceLogger.Warn("Order creation cancelled", "customer", input.CustomerName)
+			return context.Canceled
+		}
+		if err == context.DeadlineExceeded {
+			serviceLogger.Warn("Order creation timed out", "customer", input.CustomerName)
+			return context.DeadlineExceeded
+		}
+
 		serviceLogger.WithError(err).Error("Failed to create order", "customer", input.CustomerName, "total", order.TotalAmount)
 		return err
 	}

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Testzyler/order-management-go/application/models"
-	"github.com/Testzyler/order-management-go/infrastructure/logger"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,6 +20,11 @@ func NewOrderRepository(db *pgxpool.Pool) *orderRepository {
 }
 
 func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error) {
+	// Check if context is already cancelled or timed out before starting
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	if input.Page < 1 {
@@ -38,6 +43,15 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 
 	rows, err := r.db.Query(ctx, queryOrders, input.Size, offset)
 	if err != nil {
+		// Check if error is due to context cancellation
+		if err == context.Canceled {
+			repoLogger.Warn("Query cancelled by context")
+			return nil, context.Canceled
+		}
+		if err == context.DeadlineExceeded {
+			repoLogger.Warn("Query timed out")
+			return nil, context.DeadlineExceeded
+		}
 		repoLogger.WithError(err).Error("Failed to query orders")
 		return nil, err
 	}

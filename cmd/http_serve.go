@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,7 +10,7 @@ import (
 
 	"github.com/Testzyler/order-management-go/infrastructure/database"
 	"github.com/Testzyler/order-management-go/infrastructure/http"
-	"github.com/Testzyler/order-management-go/infrastructure/logger"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -26,26 +27,55 @@ var ServeCmd = &cobra.Command{
 		appLogger := logger.GetDefault()
 		appLogger.Info("Starting order management application")
 
+		// Create main context for the application
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		// Initialize services
 		initPostgresql()
-		initHttpServer()
+		initHttpServer(ctx)
 
 		appLogger.Info("All services initialized successfully")
 
 		// Wait for interrupt signal to gracefully shut down the server
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
+
+		select {
+		case <-quit:
+			appLogger.Info("Received shutdown signal")
+		case <-ctx.Done():
+			appLogger.Info("Application context cancelled")
+		}
 
 		appLogger.Info("Shutting down server...")
 
-		// Shutdown services
-		shutdownHttpServer()
-		shutdownPostgresql()
+		// Cancel the main context to signal all services to stop
+		cancel()
 
-		wg.Wait()
+		// Create shutdown context with timeout
+		// shutdownTimeout := viper.GetDuration("HttpServer.ShutdownTimeout")
+		// if shutdownTimeout == 0 {
+		// 	shutdownTimeout = 30 * time.Second
+		// }
+		// shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		// defer shutdownCancel()
 
-		appLogger.Info("Server gracefully stopped")
+		// Shutdown services with timeout
+		shutdownDone := make(chan struct{})
+		go func() {
+			defer close(shutdownDone)
+			shutdownHttpServer()
+			shutdownPostgresql()
+			wg.Wait()
+		}()
+
+		select {
+		case <-shutdownDone:
+			appLogger.Info("Server gracefully stopped")
+			// case <-shutdownCtx.Done():
+			// 	appLogger.Error("Shutdown timed out, forcing exit")
+		}
 	},
 }
 
@@ -102,11 +132,11 @@ func initLogger() error {
 	return logger.Initialize(loggerConfig)
 }
 
-func initHttpServer() {
+func initHttpServer(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		http.InitHttpServer()
+		http.InitHttpServer(ctx)
 	}()
 }
 

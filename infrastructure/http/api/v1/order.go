@@ -12,7 +12,7 @@ import (
 	"github.com/Testzyler/order-management-go/application/repositories"
 	"github.com/Testzyler/order-management-go/application/services"
 	"github.com/Testzyler/order-management-go/infrastructure/http/api/route"
-	"github.com/Testzyler/order-management-go/infrastructure/logger"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 )
@@ -94,20 +94,6 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 	duration := time.Since(start)
 
 	if err != nil {
-		// Check if error is due to context cancellation
-		if errors.Is(err, context.Canceled) {
-			requestLogger.Warn("Request cancelled by client", "duration_ms", duration.Milliseconds())
-			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message": "Request was cancelled by client",
-			})
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			requestLogger.Warn("Request timed out", "duration_ms", duration.Milliseconds())
-			return c.Status(fiber.StatusRequestTimeout).JSON(fiber.Map{
-				"message": "Request timed out",
-			})
-		}
-
 		requestLogger.WithError(err).Error("Failed to create order", "duration_ms", duration.Milliseconds())
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
 			"message": err.Error(),

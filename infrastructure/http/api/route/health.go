@@ -2,7 +2,7 @@ package route
 
 import (
 	"github.com/Testzyler/order-management-go/application/constants"
-	"github.com/Testzyler/order-management-go/infrastructure/logger"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/gofiber/fiber/v2"
 )
 

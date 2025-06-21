@@ -4,7 +4,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/Testzyler/order-management-go/infrastructure/logger"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/spf13/cobra"
 )
 

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/Testzyler/order-management-go/application/models"
-	"github.com/Testzyler/order-management-go/infrastructure/logger"
+	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	faker "github.com/bxcodec/faker/v4"
 	"github.com/spf13/cobra"
 )
