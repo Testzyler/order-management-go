@@ -21,22 +21,8 @@ func NewOrderService(repo domain.OrderRepository) *OrderService {
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrderInput) error {
-	// Check if context is already cancelled or timed out before starting
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
 	// Use logger with request ID from context
 	serviceLogger := logger.LoggerWithRequestIDFromContext(ctx)
-
-	// Create a timeout context for database operations if not already set
-	dbCtx := ctx
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		// No deadline set, create one for database operations
-		var cancel context.CancelFunc
-		dbCtx, cancel = context.WithTimeout(ctx, 15*time.Second) // Database operation timeout
-		defer cancel()
-	}
 
 	// Validate input
 	if input.CustomerName == "" {
@@ -78,7 +64,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input models.CreateOrder
 	}
 
 	order.TotalAmount = totalAmount
-	err := s.repo.CreateOrder(dbCtx, order, items)
+	err := s.repo.CreateOrder(ctx, order, items)
 
 	if err != nil {
 		// Check if error is due to context cancellation or timeout

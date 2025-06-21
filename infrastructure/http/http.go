@@ -9,6 +9,7 @@ import (
 	"github.com/Testzyler/order-management-go/infrastructure/http/middleware"
 	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/spf13/viper"
 )
 
@@ -49,11 +50,11 @@ func InitHttpServer(ctx context.Context) {
 		IdleTimeout:           idleTimeout,
 	})
 	// Add middleware for context and timeout management
+
+	AppServer.Use(recover.New())
 	AppServer.Use(middleware.ContextMiddleware(ctx))
 	AppServer.Use(middleware.CancellationMiddleware())
 	AppServer.Use(middleware.TimeoutMiddleware(requestTimeout))
-
-	// AppServer.Use(middleware.RecoveryMiddleware())
 	AppServer.Use(middleware.RequestIDMiddleware())
 
 	// Add Api Path (includes health check now)

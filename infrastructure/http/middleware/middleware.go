@@ -42,17 +42,7 @@ func TimeoutMiddleware(timeout time.Duration) fiber.Handler {
 
 		c.SetUserContext(ctx)
 
-		done := make(chan error, 1)
-		go func() {
-			done <- c.Next()
-		}()
-
-		select {
-		case err := <-done:
-			return err
-		case <-ctx.Done():
-			return fiber.NewError(fiber.StatusRequestTimeout, "Request timeout")
-		}
+		return c.Next()
 	}
 }
 

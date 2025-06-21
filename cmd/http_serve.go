@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Testzyler/order-management-go/infrastructure/database"
 	"github.com/Testzyler/order-management-go/infrastructure/http"
@@ -54,12 +55,12 @@ var ServeCmd = &cobra.Command{
 		cancel()
 
 		// Create shutdown context with timeout
-		// shutdownTimeout := viper.GetDuration("HttpServer.ShutdownTimeout")
-		// if shutdownTimeout == 0 {
-		// 	shutdownTimeout = 30 * time.Second
-		// }
-		// shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		// defer shutdownCancel()
+		shutdownTimeout := viper.GetDuration("HttpServer.ShutdownTimeout")
+		if shutdownTimeout == 0 {
+			shutdownTimeout = 30 * time.Second
+		}
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer shutdownCancel()
 
 		// Shutdown services with timeout
 		shutdownDone := make(chan struct{})
@@ -73,8 +74,8 @@ var ServeCmd = &cobra.Command{
 		select {
 		case <-shutdownDone:
 			appLogger.Info("Server gracefully stopped")
-			// case <-shutdownCtx.Done():
-			// 	appLogger.Error("Shutdown timed out, forcing exit")
+		case <-shutdownCtx.Done():
+			appLogger.Error("Shutdown timed out, forcing exit")
 		}
 	},
 }

@@ -77,10 +77,12 @@ func init() {
 }
 
 func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
+	ctx, cancel := context.WithCancel(c.Context())
+	defer cancel()
+
 	// Get logger with request ID from context
-	requestLogger := logger.LoggerWithRequestIDFromContext(c.Context())
+	requestLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	var input models.CreateOrderInput
-	ctx := c.Context()
 
 	if err := c.BodyParser(&input); err != nil {
 		requestLogger.WithError(err).Error("Failed to parse request body")
