@@ -5,22 +5,22 @@ import (
 	"fmt"
 
 	"github.com/Testzyler/order-management-go/application/models"
+	"github.com/Testzyler/order-management-go/infrastructure/database"
 	"github.com/Testzyler/order-management-go/infrastructure/utils/logger"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pkg/errors"
 )
 
-type orderRepository struct {
-	db *pgxpool.Pool
+type OrderRepository struct {
+	db database.DatabaseInterface
 }
 
-func NewOrderRepository(db *pgxpool.Pool) *orderRepository {
-	return &orderRepository{
+func NewOrderRepository(db database.DatabaseInterface) *OrderRepository {
+	return &OrderRepository{
 		db: db,
 	}
 }
 
-func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error) {
+func (r *OrderRepository) ListOrders(ctx context.Context, input models.ListInput) (*models.ListPaginatedOrders, error) {
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	if input.Page < 1 {
@@ -115,7 +115,7 @@ func (r *orderRepository) ListOrders(ctx context.Context, input models.ListInput
 	}, nil
 }
 
-func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
+func (r *OrderRepository) GetOrderById(ctx context.Context, id int) (models.OrderWithItems, error) {
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	var result models.OrderWithItems
 	var order models.Order
@@ -166,7 +166,7 @@ func (r *orderRepository) GetOrderById(ctx context.Context, id int) (models.Orde
 	return result, nil
 }
 
-func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) (err error) {
+func (r *OrderRepository) CreateOrder(ctx context.Context, order models.Order, items []models.OrderItem) (err error) {
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -215,7 +215,7 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order, i
 	return nil
 }
 
-func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (err error) {
+func (r *OrderRepository) UpdateOrder(ctx context.Context, order models.Order) (err error) {
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	tx, err := r.db.Begin(ctx)
@@ -253,7 +253,7 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order models.Order) (
 	return nil
 }
 
-func (r *orderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
+func (r *OrderRepository) DeleteOrder(ctx context.Context, id int) (err error) {
 	repoLogger := logger.LoggerWithRequestIDFromContext(ctx)
 
 	tx, err := r.db.Begin(ctx)

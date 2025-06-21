@@ -28,14 +28,6 @@ func InitHttpServer(ctx context.Context) {
 	idleTimeout := viper.GetDuration("HttpServer.IdleTimeout")
 	requestTimeout := viper.GetDuration("HttpServer.RequestTimeout")
 
-	httpLogger.Info("HTTP server configuration",
-		"port", httpPort,
-		"read_timeout", readTimeout,
-		"write_timeout", writeTimeout,
-		"idle_timeout", idleTimeout,
-		"request_timeout", requestTimeout,
-	)
-
 	// Set defaults if not configured
 	if readTimeout == 0 {
 		readTimeout = 30 * time.Second

@@ -97,7 +97,6 @@ func waitForDatabase(pool *pgxpool.Pool, timeout time.Duration) error {
 		cancel()
 
 		if err == nil {
-			log.Info("Database is ready!")
 			return nil
 		}
 
